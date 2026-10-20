@@ -110,6 +110,7 @@ namespace VelvetVault
         public string StartTime { get; set; }
         public string EndTime { get; set; }
         public string Audience { get; set; }
+        public string DayKey { get; set; }
         [ScriptIgnore]
         public string DisplayText { get { return StartTime + "–" + EndTime + "   " + Title + "   ·   " + Audience; } }
     }
@@ -419,15 +420,21 @@ namespace VelvetVault
         private TextBox lessonStartInput;
         private TextBox lessonEndInput;
         private TextBox lessonClassInput;
+        private ComboBox lessonDaySelector;
+        private ICollectionView lessonsDayView;
         private ListBox pairsList;
         private TextBox pairTitleInput;
         private TextBox pairStartInput;
         private TextBox pairEndInput;
         private TextBox pairGroupInput;
+        private ComboBox pairDaySelector;
+        private ICollectionView pairsDayView;
         private TextBlock timerDisplay;
         private TextBlock timerStatus;
         private TextBox timerMinutesInput;
         private TextBox timerSecondsInput;
+        private TextBox timerMessageInput;
+        private System.Speech.Synthesis.SpeechSynthesizer speechSynthesizer;
         private DispatcherTimer countdownTimer;
         private TimeSpan timerRemaining = TimeSpan.Zero;
         private bool timerRunning;
@@ -634,9 +641,15 @@ namespace VelvetVault
           </Grid>
         </Grid>
         <Grid x:Name='LessonsView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
-          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
-          <StackPanel Margin='0,0,0,20'><TextBlock Text='Расписание уроков' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Предмет, время начала и конца урока и класс' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
-          <Border Grid.Row='1' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='18' Margin='0,0,0,16'>
+          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
+          <Grid Margin='0,0,0,18'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='220'/></Grid.ColumnDefinitions>
+            <StackPanel><TextBlock Text='Расписание уроков' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Отдельное расписание на каждый день недели' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
+            <StackPanel Grid.Column='1'><TextBlock Style='{StaticResource Label}' Text='ДЕНЬ НЕДЕЛИ'/><ComboBox x:Name='LessonDaySelector' Style='{StaticResource ModernComboBox}'>
+              <ComboBoxItem Content='Понедельник' Tag='1'/><ComboBoxItem Content='Вторник' Tag='2'/><ComboBoxItem Content='Среда' Tag='3'/><ComboBoxItem Content='Четверг' Tag='4'/><ComboBoxItem Content='Пятница' Tag='5'/><ComboBoxItem Content='Суббота' Tag='6'/><ComboBoxItem Content='Воскресенье' Tag='7'/>
+            </ComboBox></StackPanel>
+          </Grid>
+          <Border Grid.Row='1' Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14' Margin='0,0,0,14'><TextBlock Text='Новая запись будет добавлена в выбранный день недели.' Foreground='{DynamicResource Muted}' FontSize='12'/></Border>
+          <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='18' Margin='0,0,0,16'>
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='2*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='160'/><ColumnDefinition Width='12'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
               <StackPanel><TextBlock Style='{StaticResource Label}' Text='ПРЕДМЕТ'/><TextBox x:Name='LessonTitleInput' Style='{StaticResource Field}' ToolTip='Например: Математика'/></StackPanel>
               <StackPanel Grid.Column='2'><TextBlock Style='{StaticResource Label}' Text='НАЧАЛО'/><TextBox x:Name='LessonStartInput' Style='{StaticResource Field}' ToolTip='08:30'/></StackPanel>
@@ -645,14 +658,20 @@ namespace VelvetVault
               <Button x:Name='AddLessonButton' Grid.Column='8' Style='{StaticResource ActionButton}' Content='+ Добавить' VerticalAlignment='Bottom'/>
             </Grid>
           </Border>
-          <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='LessonsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
-          <Button x:Name='DeleteLessonButton' Grid.Row='3' Style='{StaticResource DangerButton}' Content='Удалить выбранный урок' HorizontalAlignment='Right' Margin='0,16,0,0'/>
+          <Border Grid.Row='3' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='LessonsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
+          <Button x:Name='DeleteLessonButton' Grid.Row='4' Style='{StaticResource DangerButton}' Content='Удалить выбранный урок' HorizontalAlignment='Right' Margin='0,16,0,0'/>
         </Grid>
 
         <Grid x:Name='PairsView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
-          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
-          <StackPanel Margin='0,0,0,20'><TextBlock Text='Расписание пар' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Предмет, начало и конец пары и учебная группа' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
-          <Border Grid.Row='1' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='18' Margin='0,0,0,16'>
+          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
+          <Grid Margin='0,0,0,18'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='220'/></Grid.ColumnDefinitions>
+            <StackPanel><TextBlock Text='Расписание пар' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Отдельное расписание на каждый день недели' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
+            <StackPanel Grid.Column='1'><TextBlock Style='{StaticResource Label}' Text='ДЕНЬ НЕДЕЛИ'/><ComboBox x:Name='PairDaySelector' Style='{StaticResource ModernComboBox}'>
+              <ComboBoxItem Content='Понедельник' Tag='1'/><ComboBoxItem Content='Вторник' Tag='2'/><ComboBoxItem Content='Среда' Tag='3'/><ComboBoxItem Content='Четверг' Tag='4'/><ComboBoxItem Content='Пятница' Tag='5'/><ComboBoxItem Content='Суббота' Tag='6'/><ComboBoxItem Content='Воскресенье' Tag='7'/>
+            </ComboBox></StackPanel>
+          </Grid>
+          <Border Grid.Row='1' Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14' Margin='0,0,0,14'><TextBlock Text='Новая запись будет добавлена в выбранный день недели.' Foreground='{DynamicResource Muted}' FontSize='12'/></Border>
+          <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='18' Margin='0,0,0,16'>
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='2*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='160'/><ColumnDefinition Width='12'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
               <StackPanel><TextBlock Style='{StaticResource Label}' Text='ПРЕДМЕТ'/><TextBox x:Name='PairTitleInput' Style='{StaticResource Field}' ToolTip='Например: Программирование'/></StackPanel>
               <StackPanel Grid.Column='2'><TextBlock Style='{StaticResource Label}' Text='НАЧАЛО'/><TextBox x:Name='PairStartInput' Style='{StaticResource Field}' ToolTip='09:00'/></StackPanel>
@@ -661,20 +680,25 @@ namespace VelvetVault
               <Button x:Name='AddPairButton' Grid.Column='8' Style='{StaticResource ActionButton}' Content='+ Добавить' VerticalAlignment='Bottom'/>
             </Grid>
           </Border>
-          <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='PairsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
-          <Button x:Name='DeletePairButton' Grid.Row='3' Style='{StaticResource DangerButton}' Content='Удалить выбранную пару' HorizontalAlignment='Right' Margin='0,16,0,0'/>
+          <Border Grid.Row='3' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='PairsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
+          <Button x:Name='DeletePairButton' Grid.Row='4' Style='{StaticResource DangerButton}' Content='Удалить выбранную пару' HorizontalAlignment='Right' Margin='0,16,0,0'/>
         </Grid>
 
         <Grid x:Name='TimerView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,30,28'>
           <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='*'/></Grid.RowDefinitions>
-          <StackPanel Margin='0,0,0,20'><TextBlock Text='Таймер' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Запустите обратный отсчёт на нужное время' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
-          <Border Grid.Row='1' Width='520' Background='{DynamicResource SurfaceBrush}' CornerRadius='22' Padding='30' HorizontalAlignment='Center' VerticalAlignment='Center'>
+          <StackPanel Margin='0,0,0,20'><TextBlock Text='Таймер' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Обратный отсчёт с голосовым сообщением после завершения' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
+          <Border Grid.Row='1' Width='560' Background='{DynamicResource SurfaceBrush}' CornerRadius='22' Padding='30' HorizontalAlignment='Center' VerticalAlignment='Center'>
             <StackPanel>
               <TextBlock x:Name='TimerDisplay' Text='00:00' Foreground='{DynamicResource Ink}' FontSize='58' FontWeight='Bold' TextAlignment='Center' Margin='0,5,0,22'/>
               <Grid Margin='0,0,0,18'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='14'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
                 <StackPanel><TextBlock Style='{StaticResource Label}' Text='МИНУТЫ'/><TextBox x:Name='TimerMinutesInput' Text='25' Style='{StaticResource Field}' TextAlignment='Center'/></StackPanel>
                 <StackPanel Grid.Column='2'><TextBlock Style='{StaticResource Label}' Text='СЕКУНДЫ'/><TextBox x:Name='TimerSecondsInput' Text='0' Style='{StaticResource Field}' TextAlignment='Center'/></StackPanel>
               </Grid>
+              <StackPanel Margin='0,0,0,18'>
+                <TextBlock Style='{StaticResource Label}' Text='ЧТО СКАЗАТЬ ПО ОКОНЧАНИИ'/>
+                <TextBox x:Name='TimerMessageInput' Text='Время вышло' Style='{StaticResource Field}' Height='48' ToolTip='Например: Пора делать домашнее задание'/>
+                <TextBlock Text='Velvet попробует использовать установленный русский голос Windows.' Foreground='{DynamicResource Muted}' FontSize='10' Margin='2,6,0,0'/>
+              </StackPanel>
               <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='10'/><ColumnDefinition Width='*'/><ColumnDefinition Width='10'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
                 <Button x:Name='StartTimerButton' Style='{StaticResource ActionButton}' Content='▶ Старт'/>
                 <Button x:Name='PauseTimerButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='Ⅱ Пауза'/>
@@ -767,9 +791,9 @@ namespace VelvetVault
             dialogOverlay = Find<Grid>("DialogOverlay"); dialogCard = Find<Border>("DialogCard"); dialogTitle = Find<TextBlock>("DialogTitle"); dialogMessage = Find<TextBlock>("DialogMessage"); dialogCancelButton = Find<Button>("DialogCancelButton"); dialogConfirmButton = Find<Button>("DialogConfirmButton");
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
-            lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput");
-            pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput");
-            timerView = Find<Grid>("TimerView"); timerDisplay = Find<TextBlock>("TimerDisplay"); timerStatus = Find<TextBlock>("TimerStatus"); timerMinutesInput = Find<TextBox>("TimerMinutesInput"); timerSecondsInput = Find<TextBox>("TimerSecondsInput");
+            lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput"); lessonDaySelector = Find<ComboBox>("LessonDaySelector");
+            pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput"); pairDaySelector = Find<ComboBox>("PairDaySelector");
+            timerView = Find<Grid>("TimerView"); timerDisplay = Find<TextBlock>("TimerDisplay"); timerStatus = Find<TextBlock>("TimerStatus"); timerMinutesInput = Find<TextBox>("TimerMinutesInput"); timerSecondsInput = Find<TextBox>("TimerSecondsInput"); timerMessageInput = Find<TextBox>("TimerMessageInput");
             calculatorView = Find<Grid>("CalculatorView"); calculatorDisplay = Find<TextBox>("CalculatorDisplay");
             notesView = Find<Grid>("NotesView"); notesList = Find<ListBox>("NotesList"); noteTitleBox = Find<TextBox>("NoteTitleBox"); noteTextBox = Find<TextBox>("NoteTextBox");
             tasksView = Find<Grid>("TasksView"); tasksList = Find<ListBox>("TasksList"); taskInput = Find<TextBox>("TaskInput"); todayDateText = Find<TextBlock>("TodayDateText");
@@ -800,6 +824,8 @@ namespace VelvetVault
             Find<Button>("DeleteLessonButton").Click += delegate { DeleteScheduleItem(true); };
             Find<Button>("AddPairButton").Click += delegate { AddScheduleItem(false); };
             Find<Button>("DeletePairButton").Click += delegate { DeleteScheduleItem(false); };
+            lessonDaySelector.SelectionChanged += delegate { RefreshScheduleViews(); };
+            pairDaySelector.SelectionChanged += delegate { RefreshScheduleViews(); };
             Find<Button>("StartTimerButton").Click += delegate { StartCountdown(); };
             Find<Button>("PauseTimerButton").Click += delegate { PauseCountdown(); };
             Find<Button>("ResetTimerButton").Click += delegate { ResetCountdown(); };
@@ -892,8 +918,12 @@ namespace VelvetVault
         private void LoadHubData()
         {
             notesList.ItemsSource = hubNotes;
-            lessonsList.ItemsSource = hubLessons;
-            pairsList.ItemsSource = hubPairs;
+            lessonsDayView = CollectionViewSource.GetDefaultView(hubLessons);
+            lessonsDayView.Filter = delegate(object item) { ScheduleItem entry = item as ScheduleItem; return entry != null && entry.DayKey == SelectedScheduleDay(lessonDaySelector); };
+            lessonsList.ItemsSource = lessonsDayView;
+            pairsDayView = CollectionViewSource.GetDefaultView(hubPairs);
+            pairsDayView.Filter = delegate(object item) { ScheduleItem entry = item as ScheduleItem; return entry != null && entry.DayKey == SelectedScheduleDay(pairDaySelector); };
+            pairsList.ItemsSource = pairsDayView;
             tasksTodayView = CollectionViewSource.GetDefaultView(hubTasks);
             tasksTodayView.Filter = delegate(object item) { TaskItem task = item as TaskItem; return task != null && task.DateKey == TodayKey(); };
             tasksList.ItemsSource = tasksTodayView;
@@ -908,14 +938,16 @@ namespace VelvetVault
                     {
                         if (data.Notes != null) foreach (NoteItem item in data.Notes) hubNotes.Add(item);
                         if (data.Tasks != null) foreach (TaskItem item in data.Tasks) { if (string.IsNullOrEmpty(item.DateKey)) item.DateKey = TodayKey(); hubTasks.Add(item); }
-                        if (data.Lessons != null) foreach (ScheduleItem item in data.Lessons) hubLessons.Add(item);
-                        if (data.Pairs != null) foreach (ScheduleItem item in data.Pairs) hubPairs.Add(item);
+                        if (data.Lessons != null) foreach (ScheduleItem item in data.Lessons) { if (string.IsNullOrEmpty(item.DayKey)) item.DayKey = CurrentScheduleDay(); hubLessons.Add(item); }
+                        if (data.Pairs != null) foreach (ScheduleItem item in data.Pairs) { if (string.IsNullOrEmpty(item.DayKey)) item.DayKey = CurrentScheduleDay(); hubPairs.Add(item); }
                         if (data.Finance != null) foreach (FinanceItem item in data.Finance) hubFinance.Add(item);
                         if (data.Documents != null) foreach (DocumentItem item in data.Documents) hubDocuments.Add(item);
                     }
                 }
             }
             catch { }
+            SelectCurrentScheduleDay();
+            RefreshScheduleViews();
             UpdateFinanceBalance();
             RefreshTodayTasks();
             if (hubNotes.Count > 0) notesList.SelectedIndex = 0;
@@ -976,6 +1008,31 @@ namespace VelvetVault
 
         private static string TodayKey() { return DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); }
 
+        private static string CurrentScheduleDay()
+        {
+            int value = (int)DateTime.Today.DayOfWeek;
+            return (value == 0 ? 7 : value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string SelectedScheduleDay(ComboBox selector)
+        {
+            ComboBoxItem item = selector == null ? null : selector.SelectedItem as ComboBoxItem;
+            return item == null || item.Tag == null ? CurrentScheduleDay() : item.Tag.ToString();
+        }
+
+        private void SelectCurrentScheduleDay()
+        {
+            int index = int.Parse(CurrentScheduleDay(), CultureInfo.InvariantCulture) - 1;
+            if (lessonDaySelector != null) lessonDaySelector.SelectedIndex = index;
+            if (pairDaySelector != null) pairDaySelector.SelectedIndex = index;
+        }
+
+        private void RefreshScheduleViews()
+        {
+            if (lessonsDayView != null) lessonsDayView.Refresh();
+            if (pairsDayView != null) pairsDayView.Refresh();
+        }
+
         private void RefreshTodayTasks()
         {
             if (todayDateText != null) todayDateText.Text = DateTime.Today.ToString("d MMMM yyyy", new CultureInfo("ru-RU"));
@@ -1010,7 +1067,8 @@ namespace VelvetVault
                 Title = subject,
                 StartTime = start.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
                 EndTime = end.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
-                Audience = audience
+                Audience = audience,
+                DayKey = SelectedScheduleDay(lesson ? lessonDaySelector : pairDaySelector)
             };
             ObservableCollection<ScheduleItem> target = lesson ? hubLessons : hubPairs;
             target.Add(item);
@@ -1018,6 +1076,7 @@ namespace VelvetVault
             startBox.Text = "";
             endBox.Text = "";
             SaveHubData();
+            RefreshScheduleViews();
             title.Focus();
             ShowToast(lesson ? "Урок добавлен" : "Пара добавлена");
         }
@@ -1029,6 +1088,7 @@ namespace VelvetVault
             if (item == null) { ShowToast(lesson ? "Выберите урок" : "Выберите пару"); return; }
             (lesson ? hubLessons : hubPairs).Remove(item);
             SaveHubData();
+            RefreshScheduleViews();
             ShowToast(lesson ? "Урок удалён" : "Пара удалена");
         }
 
@@ -1078,6 +1138,7 @@ namespace VelvetVault
                 timerRunning = false;
                 timerStatus.Text = "Время вышло!";
                 try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+                SpeakTimerMessage();
                 ShowToast("Таймер завершён");
             }
             UpdateTimerDisplay();
@@ -1090,6 +1151,36 @@ namespace VelvetVault
             int minutes = totalSeconds / 60;
             int seconds = totalSeconds % 60;
             timerDisplay.Text = minutes.ToString("00", CultureInfo.InvariantCulture) + ":" + seconds.ToString("00", CultureInfo.InvariantCulture);
+        }
+
+        private void SpeakTimerMessage()
+        {
+            string message = timerMessageInput == null ? "" : timerMessageInput.Text.Trim();
+            if (message.Length == 0) message = "Время вышло";
+            try
+            {
+                if (speechSynthesizer == null)
+                {
+                    speechSynthesizer = new System.Speech.Synthesis.SpeechSynthesizer();
+                    speechSynthesizer.Volume = 100;
+                    speechSynthesizer.Rate = -1;
+                    foreach (System.Speech.Synthesis.InstalledVoice installed in speechSynthesizer.GetInstalledVoices())
+                    {
+                        if (installed.Enabled && installed.VoiceInfo != null && installed.VoiceInfo.Culture != null && installed.VoiceInfo.Culture.TwoLetterISOLanguageName == "ru")
+                        {
+                            speechSynthesizer.SelectVoice(installed.VoiceInfo.Name);
+                            break;
+                        }
+                    }
+                }
+                speechSynthesizer.SpeakAsyncCancelAll();
+                speechSynthesizer.SpeakAsync(message);
+            }
+            catch
+            {
+                try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
+                ShowToast("Голос Windows недоступен, но таймер завершён");
+            }
         }
 
         private void AddTask()
@@ -1467,6 +1558,7 @@ namespace VelvetVault
             if (mainView.Visibility != Visibility.Visible) return;
             Clipboard.Clear();
             entries.Clear();
+            if (speechSynthesizer != null) { try { speechSynthesizer.SpeakAsyncCancelAll(); speechSynthesizer.Dispose(); } catch { } }
             if (sessionKey != null) Array.Clear(sessionKey, 0, sessionKey.Length);
             if (sessionSalt != null) Array.Clear(sessionSalt, 0, sessionSalt.Length);
             sessionKey = null; sessionSalt = null;
