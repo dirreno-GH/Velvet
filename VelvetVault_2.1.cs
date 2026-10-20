@@ -417,6 +417,7 @@ namespace VelvetVault
         private TextBlock launcherModsPathText;
         private TextBox launcherNicknameInput;
         private bool launcherDownloadBusy;
+        private bool launcherAutoStartAfterPrepare;
         private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
         private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
         private readonly string velvetGameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft");
@@ -748,7 +749,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='В одной папке Velvet будут versions, libraries, assets, mods, resourcepacks, saves, config, logs и другие игровые папки. Velvet импортирует локальную 1.12.2 с этого ПК, ставит Legacy Fabric в свою папку и запускает игру напрямую через Java.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Нажмите «Запустить»: если папка Velvet ещё не готова, программа сама подготовит 1.12.2 + Legacy Fabric и после завершения автоматически запустит игру. Вся игра хранится в отдельной папке Velvet.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -1576,10 +1577,16 @@ namespace VelvetVault
 
         private async void DownloadVelvetMinecraft()
         {
-            if (launcherDownloadBusy) return;
+            if (launcherDownloadBusy)
+            {
+                launcherStatusText.Text = "Подготовка уже выполняется…";
+                return;
+            }
+
             launcherDownloadBusy = true;
             launcherDownloadButton.IsEnabled = false;
             launcherLaunchButton.IsEnabled = true;
+            bool canAutoLaunch = false;
 
             try
             {
@@ -1613,9 +1620,11 @@ namespace VelvetVault
                     launcherDownloadButton.Content = "↻  Переустановить Fabric";
                     ShowToast("Minecraft 1.12.2 + Legacy Fabric готовы");
                     WriteLauncherLog("Подготовка завершена успешно.");
+                    canAutoLaunch = launcherAutoStartAfterPrepare;
                 }
                 else
                 {
+                    launcherAutoStartAfterPrepare = false;
                     SetLauncherProgress(100, "Legacy Fabric установлен · базовая Minecraft 1.12.2 на ПК не найдена");
                     launcherDownloadButton.Content = "↻  Переустановить Fabric";
                     ShowToast("Fabric установлен. Для запуска нужна локальная Minecraft 1.12.2");
@@ -1624,6 +1633,7 @@ namespace VelvetVault
             }
             catch (Exception ex)
             {
+                launcherAutoStartAfterPrepare = false;
                 string details = ex.GetType().Name + ": " + ex.Message;
                 WriteLauncherLog("ОШИБКА: " + details + Environment.NewLine + ex.StackTrace);
                 SetLauncherProgress((int)(launcherProgressBar == null ? 0 : launcherProgressBar.Value), "Ошибка Fabric: " + ShortLauncherError(ex.Message));
@@ -1634,6 +1644,12 @@ namespace VelvetVault
                 launcherDownloadBusy = false;
                 launcherDownloadButton.IsEnabled = true;
                 launcherLaunchButton.IsEnabled = true;
+
+                if (canAutoLaunch)
+                {
+                    launcherAutoStartAfterPrepare = false;
+                    Dispatcher.BeginInvoke(new Action(delegate { LaunchVelvetMinecraft(); }));
+                }
             }
         }
 
@@ -1911,17 +1927,16 @@ namespace VelvetVault
                 ShowToast("Проверьте локальный ник");
                 return;
             }
-            if (!IsLegacyFabric1122Installed())
+
+            bool fabricReady = IsLegacyFabric1122Installed();
+            bool baseReady = HasVelvetMinecraft1122Files();
+
+            if (!fabricReady || !baseReady)
             {
-                SetLauncherProgress((int)launcherProgressBar.Value, "Сначала нажмите «Скачать Fabric»");
-                ShowToast("Сначала установите Legacy Fabric 1.12.2");
-                return;
-            }
-            if (!HasVelvetMinecraft1122Files())
-            {
-                EnsureVelvetGameFolders();
-                launcherStatusText.Text = "В папке Velvet ещё нет базовых файлов 1.12.2 · нажмите «Подготовить 1.12.2 + Fabric»";
-                ShowToast("Сначала подготовьте папку Velvet Minecraft");
+                launcherAutoStartAfterPrepare = true;
+                launcherStatusText.Text = "Подготавливаю Velvet Minecraft 1.12.2 + Legacy Fabric…";
+                ShowToast("Velvet сам подготовит игру и затем запустит её");
+                DownloadVelvetMinecraft();
                 return;
             }
 
