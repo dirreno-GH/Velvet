@@ -529,7 +529,7 @@ namespace VelvetVault
         </Canvas>
         <Border x:Name='SidebarPanel' Grid.Column='0' Background='{DynamicResource SidebarBrush}' CornerRadius='0,0,0,22'>
           <Grid Margin='18'><Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
-            <StackPanel Orientation='Horizontal' Margin='2,14,0,24'><Border Width='42' Height='42' CornerRadius='13' Background='{DynamicResource AccentBrush}'><TextBlock Text='V' Foreground='White' FontSize='21' FontWeight='Bold' HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><StackPanel Margin='12,3,0,0'><TextBlock Text='Velvet' Foreground='White' FontSize='16' FontWeight='Bold'/><TextBlock Text='центр приложений' Foreground='#8E91A8' FontSize='11'/></StackPanel></StackPanel>
+            <StackPanel Orientation='Horizontal' Margin='2,14,0,24'><Image Width='42' Height='42' Source='pack://application:,,,/VelvetVault-logo.png' Stretch='Uniform'/><StackPanel Margin='12,3,0,0'><TextBlock Text='Velvet' Foreground='White' FontSize='16' FontWeight='Bold'/><TextBlock Text='центр приложений' Foreground='#8E91A8' FontSize='11'/></StackPanel></StackPanel>
             <StackPanel Grid.Row='1'>
               <TextBlock Text='ПРИЛОЖЕНИЯ' Foreground='#696C83' FontSize='10' FontWeight='Bold' Margin='2,0,0,9'/>
               <Button x:Name='VaultAppButton' Style='{StaticResource AppNavActive}' Content='◆   Хранилище паролей'/>

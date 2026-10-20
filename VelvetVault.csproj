@@ -14,4 +14,7 @@
   <ItemGroup>
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
+  <ItemGroup>
+    <Resource Include="VelvetVault-logo.png" />
+  </ItemGroup>
 </Project>
