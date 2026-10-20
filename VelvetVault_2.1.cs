@@ -914,7 +914,7 @@ namespace VelvetVault
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
             launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText"); launcherNicknameInput = Find<TextBox>("LauncherNicknameInput");
-            launcherModsPathText.Text = Path.Combine(velvetGameDirectory, "mods");
+            launcherModsPathText.Text = velvetGameDirectory;
             lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput"); lessonDaySelector = Find<ComboBox>("LessonDaySelector");
             pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput"); pairDaySelector = Find<ComboBox>("PairDaySelector");
             timerView = Find<Grid>("TimerView"); timerDisplay = Find<TextBlock>("TimerDisplay"); timerStatus = Find<TextBlock>("TimerStatus"); timerMinutesInput = Find<TextBox>("TimerMinutesInput"); timerSecondsInput = Find<TextBox>("TimerSecondsInput"); timerMessageInput = Find<TextBox>("TimerMessageInput");
@@ -944,7 +944,15 @@ namespace VelvetVault
             Find<Button>("FinanceAppButton").Click += delegate { ShowModule(financeView, "FinanceAppButton"); };
             Find<Button>("FilesAppButton").Click += delegate { ShowModule(converterView, "FilesAppButton"); };
             Find<Button>("DocumentsAppButton").Click += delegate { ShowModule(documentsView, "DocumentsAppButton"); };
-            Find<Button>("LauncherAppButton").Click += delegate { RefreshLauncherStatus(); ShowModule(launcherView, "LauncherAppButton"); };
+            Find<Button>("LauncherAppButton").Click += delegate
+            {
+                ShowModule(launcherView, "LauncherAppButton");
+                launcherStatusText.Text = "Страница готова. Проверки начнутся только после нажатия кнопки.";
+                launcherProgressBar.Value = 0;
+                launcherProgressText.Text = "0%";
+                launcherLaunchButton.IsEnabled = true;
+                launcherDownloadButton.IsEnabled = true;
+            };
             Find<Button>("LauncherDownloadButton").Click += delegate { DownloadVelvetMinecraft(); };
             Find<Button>("LauncherLaunchButton").Click += delegate { LaunchVelvetMinecraft(); };
             Find<Button>("ChooseMinecraftSourceButton").Click += delegate { ChooseMinecraft1122Source(); };
@@ -1530,28 +1538,13 @@ namespace VelvetVault
         private void RefreshLauncherStatus()
         {
             if (launcherStatusText == null) return;
-
-            // This method runs when the page is opened, so it must stay instant.
-            // Never recursively scan AppData or Java installations here.
-            EnsureVelvetGameFolders();
             launcherModsPathText.Text = velvetGameDirectory;
-
-            bool fabricInstalled = IsLegacyFabric1122Installed();
-            bool baseInstalled = HasVelvetMinecraft1122Files();
-            bool ready = fabricInstalled && baseInstalled;
-
             launcherLaunchButton.IsEnabled = true;
-            launcherDownloadButton.IsEnabled = !launcherDownloadBusy;
-            launcherDownloadButton.Content = ready ? "↻  Переустановить Fabric" : "↓  Подготовить 1.12.2 + Fabric";
-
-            if (ready)
-                SetLauncherProgress(100, "Файлы Velvet Minecraft готовы · Java проверится при запуске");
-            else if (fabricInstalled)
-                SetLauncherProgress(80, "Legacy Fabric установлен · нажмите «Запустить», поиск 1.12.2 пойдёт в фоне");
-            else if (baseInstalled)
-                SetLauncherProgress(60, "Minecraft 1.12.2 импортирована · осталось подготовить Legacy Fabric");
-            else
-                SetLauncherProgress(0, "Нажмите «Запустить» · подготовка и поиск 1.12.2 выполнятся в фоне");
+            launcherDownloadButton.IsEnabled = true;
+            launcherDownloadButton.Content = "↓  Подготовить 1.12.2 + Fabric";
+            launcherProgressBar.Value = 0;
+            launcherProgressText.Text = "0%";
+            launcherStatusText.Text = "Страница готова. Проверки начнутся только после нажатия кнопки.";
         }
 
         private static Dictionary<string, object> AsDictionary(object value)
