@@ -733,7 +733,7 @@ namespace VelvetVault
               <Grid Margin='0,0,0,14'>
                 <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
                 <Button x:Name='LauncherDownloadButton' Style='{StaticResource ActionButton}' Content='↓  Скачать'/>
-                <Button x:Name='LauncherLaunchButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▶  Запустить' IsEnabled='False'/>
+                <Button x:Name='LauncherLaunchButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▶  Запустить'/>
               </Grid>
 
               <Button x:Name='OpenModsFolderButton' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet / mods' Margin='0,0,0,18'/>
@@ -1146,14 +1146,14 @@ namespace VelvetVault
             bool javaFound = !string.IsNullOrWhiteSpace(FindJavaExecutable());
             bool ready = fabricInstalled && baseInstalled && javaFound;
 
-            launcherLaunchButton.IsEnabled = ready && !launcherDownloadBusy;
+            launcherLaunchButton.IsEnabled = true;
             launcherDownloadButton.IsEnabled = !launcherDownloadBusy;
             launcherDownloadButton.Content = fabricInstalled ? "↻  Переустановить Fabric" : "↓  Скачать Fabric";
 
             if (ready)
                 SetLauncherProgress(100, "Готово · прямой запуск 1.12.2 Legacy Fabric доступен");
             else if (!baseInstalled)
-                SetLauncherProgress(fabricInstalled ? 100 : 0, "Не найдены локальные файлы Minecraft 1.12.2 в %APPDATA%\\.minecraft");
+                SetLauncherProgress(fabricInstalled ? 100 : 0, "Кнопка запуска доступна · при нажатии Velvet покажет, каких файлов Minecraft 1.12.2 не хватает");
             else if (!javaFound)
                 SetLauncherProgress(fabricInstalled ? 100 : 0, "Не найдена Java. Для 1.12.2 лучше Java 8.");
             else
@@ -1337,7 +1337,7 @@ namespace VelvetVault
             if (launcherDownloadBusy) return;
             launcherDownloadBusy = true;
             launcherDownloadButton.IsEnabled = false;
-            launcherLaunchButton.IsEnabled = false;
+            launcherLaunchButton.IsEnabled = true;
 
             try
             {
@@ -1368,7 +1368,7 @@ namespace VelvetVault
             {
                 launcherDownloadBusy = false;
                 launcherDownloadButton.IsEnabled = true;
-                launcherLaunchButton.IsEnabled = IsVelvetLauncherReady();
+                launcherLaunchButton.IsEnabled = true;
             }
         }
 
