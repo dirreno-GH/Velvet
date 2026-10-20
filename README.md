@@ -39,7 +39,11 @@ Get-FileHash .\VelvetVault-2.1.exe -Algorithm SHA256
 
 ## Code signing policy
 
-См. [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md). Проект подготовлен для подачи в SignPath Foundation на бесплатную доверенную подпись open-source сборок.
+**Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/)** — для подписанных релизов после одобрения проекта SignPath Foundation.
+
+См. [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
+
+> Текущий EXE ещё не подписан SignPath. Репозиторий подготовлен для подачи заявки; доверенная подпись будет включена только после официального одобрения проекта.
 
 ## Системные требования
 
@@ -76,3 +80,15 @@ Get-FileHash .\VelvetVault-2.1.exe -Algorithm SHA256
 ## Лицензия
 
 Исходный код распространяется по [MIT License](LICENSE).
+
+
+## Удаление
+
+Velvet Vault распространяется как portable EXE и не устанавливает системную службу.
+
+1. Закройте Velvet Vault.
+2. Удалите файл `VelvetVault-2.1.exe`.
+3. Если нужно удалить также локальные данные приложения, удалите папку:
+   `%LOCALAPPDATA%\VelvetVault`
+
+Удаление папки данных удалит локальные настройки и сохранённые данные Velvet, поэтому предварительно сделайте резервную копию нужной информации.
