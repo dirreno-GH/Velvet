@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -417,7 +418,7 @@ namespace VelvetVault
         private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
         private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
         private readonly string velvetGameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft");
-        private const string LegacyFabricInstallerUrl = "https://maven.legacyfabric.net/net/legacyfabric/fabric-installer/0.11.1/fabric-installer-0.11.1.exe";
+        private const string LegacyFabricMetaUrl = "https://meta.legacyfabric.net/";
         private const string LegacyFabricMavenUrl = "https://repo.legacyfabric.net/legacyfabric/";
         private Grid lessonsView;
         private Grid pairsView;
@@ -742,7 +743,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Установка проходит в фоне без окон установщика. Моды Velvet хранятся отдельно от других лаунчеров. После установки кнопка «Запустить» откроет официальный Minecraft Launcher с профилем Velvet 1.12.2 Fabric.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Velvet сам скачивает Legacy Fabric 1.12.2 в фоне — отдельный установщик Fabric больше не запускается. Моды Velvet хранятся отдельно от других лаунчеров. После установки кнопка «Запустить» откроет официальный Minecraft Launcher с профилем Velvet 1.12.2 Fabric.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -1158,6 +1159,179 @@ namespace VelvetVault
             }
         }
 
+        private static Dictionary<string, object> AsDictionary(object value)
+        {
+            return value as Dictionary<string, object>;
+        }
+
+        private static object[] AsObjectArray(object value)
+        {
+            object[] array = value as object[];
+            if (array != null) return array;
+            ArrayList list = value as ArrayList;
+            return list == null ? new object[0] : list.ToArray();
+        }
+
+        private async Task<string> DownloadLegacyFabricText(string url)
+        {
+            using (WebClient client = new WebClient())
+            {
+                client.Headers.Add(HttpRequestHeader.UserAgent, "VelvetLauncher/2.1");
+                return await client.DownloadStringTaskAsync(new Uri(url));
+            }
+        }
+
+        private async Task<string> GetLatestLegacyFabricLoaderVersion()
+        {
+            string json = await DownloadLegacyFabricText(LegacyFabricMetaUrl + "v1/versions/loader/1.12.2");
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            object[] entries = AsObjectArray(serializer.DeserializeObject(json));
+            if (entries.Length == 0) throw new InvalidOperationException("Legacy Fabric не вернул loader для Minecraft 1.12.2.");
+
+            Dictionary<string, object> first = AsDictionary(entries[0]);
+            if (first == null || !first.ContainsKey("loader")) throw new InvalidOperationException("Некорректный ответ Legacy Fabric Meta API.");
+            Dictionary<string, object> loader = AsDictionary(first["loader"]);
+            if (loader == null || !loader.ContainsKey("version")) throw new InvalidOperationException("Не удалось определить версию Legacy Fabric Loader.");
+
+            string version = Convert.ToString(loader["version"], CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(version)) throw new InvalidOperationException("Legacy Fabric Loader version пуст.");
+            return version.Trim();
+        }
+
+        private static string NormalizeLegacyFabricUrls(string json)
+        {
+            return (json ?? "")
+                .Replace("https://maven.legacyfabric.net/", LegacyFabricMavenUrl)
+                .Replace("http://maven.legacyfabric.net/", LegacyFabricMavenUrl);
+        }
+
+        private static string GetLibraryRelativePath(string coordinate)
+        {
+            if (string.IsNullOrWhiteSpace(coordinate)) return null;
+            string value = coordinate.Trim();
+            string extension = "jar";
+            int at = value.LastIndexOf('@');
+            if (at > 0)
+            {
+                extension = value.Substring(at + 1);
+                value = value.Substring(0, at);
+            }
+
+            string[] parts = value.Split(':');
+            if (parts.Length < 3) return null;
+            string group = parts[0].Replace('.', Path.DirectorySeparatorChar);
+            string artifact = parts[1];
+            string version = parts[2];
+            string classifier = parts.Length >= 4 && !string.IsNullOrWhiteSpace(parts[3]) ? "-" + parts[3] : "";
+            string file = artifact + "-" + version + classifier + "." + extension;
+            return Path.Combine(group, artifact, version, file);
+        }
+
+        private static string GetLibraryUrl(string baseUrl, string coordinate)
+        {
+            string relative = GetLibraryRelativePath(coordinate);
+            if (string.IsNullOrWhiteSpace(relative) || string.IsNullOrWhiteSpace(baseUrl)) return null;
+            string root = baseUrl.Replace("https://maven.legacyfabric.net/", LegacyFabricMavenUrl)
+                                 .Replace("http://maven.legacyfabric.net/", LegacyFabricMavenUrl);
+            if (!root.EndsWith("/", StringComparison.Ordinal)) root += "/";
+            return root + relative.Replace(Path.DirectorySeparatorChar, '/');
+        }
+
+        private async Task DownloadLegacyFabricLibraries(Dictionary<string, object> profile, int startPercent, int endPercent)
+        {
+            if (profile == null || !profile.ContainsKey("libraries")) return;
+            object[] rawLibraries = AsObjectArray(profile["libraries"]);
+            List<Dictionary<string, object>> libraries = new List<Dictionary<string, object>>();
+
+            foreach (object raw in rawLibraries)
+            {
+                Dictionary<string, object> library = AsDictionary(raw);
+                if (library == null) continue;
+                if (library.ContainsKey("natives")) continue;
+                if (!library.ContainsKey("name") || !library.ContainsKey("url")) continue;
+                libraries.Add(library);
+            }
+
+            if (libraries.Count == 0) return;
+            string librariesRoot = Path.Combine(minecraftDirectory, "libraries");
+            Directory.CreateDirectory(librariesRoot);
+
+            for (int i = 0; i < libraries.Count; i++)
+            {
+                Dictionary<string, object> library = libraries[i];
+                string name = Convert.ToString(library["name"], CultureInfo.InvariantCulture);
+                string baseUrl = Convert.ToString(library["url"], CultureInfo.InvariantCulture);
+                string relative = GetLibraryRelativePath(name);
+                string url = GetLibraryUrl(baseUrl, name);
+                if (string.IsNullOrWhiteSpace(relative) || string.IsNullOrWhiteSpace(url)) continue;
+
+                string target = Path.Combine(librariesRoot, relative);
+                int percent = startPercent + (int)Math.Round((i / (double)Math.Max(1, libraries.Count)) * (endPercent - startPercent));
+                SetLauncherProgress(percent, "Скачиваю библиотеки Fabric " + (i + 1).ToString(CultureInfo.InvariantCulture) + "/" + libraries.Count.ToString(CultureInfo.InvariantCulture) + "…");
+
+                if (File.Exists(target) && new FileInfo(target).Length > 0) continue;
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
+
+                try
+                {
+                    using (WebClient client = new WebClient())
+                    {
+                        client.Headers.Add(HttpRequestHeader.UserAgent, "VelvetLauncher/2.1");
+                        await client.DownloadFileTaskAsync(new Uri(url), target);
+                    }
+                }
+                catch
+                {
+                    try { if (File.Exists(target) && new FileInfo(target).Length == 0) File.Delete(target); } catch { }
+                }
+            }
+        }
+
+        private async Task<string> InstallLegacyFabricDirectly()
+        {
+            SetLauncherProgress(8, "Получаю актуальную версию Legacy Fabric Loader…");
+            string loaderVersion = await GetLatestLegacyFabricLoaderVersion();
+
+            SetLauncherProgress(18, "Получаю профиль Minecraft 1.12.2 Fabric…");
+            string profileUrl = LegacyFabricMetaUrl + "v2/versions/loader/1.12.2/" + Uri.EscapeDataString(loaderVersion) + "/profile/json";
+            string profileJson = NormalizeLegacyFabricUrls(await DownloadLegacyFabricText(profileUrl));
+            if (string.IsNullOrWhiteSpace(profileJson)) throw new InvalidOperationException("Legacy Fabric вернул пустой профиль.");
+
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            Dictionary<string, object> profile = serializer.Deserialize<Dictionary<string, object>>(profileJson);
+            if (profile == null) throw new InvalidOperationException("Не удалось прочитать профиль Legacy Fabric.");
+
+            string versionId = null;
+            object idValue;
+            if (profile.TryGetValue("id", out idValue)) versionId = Convert.ToString(idValue, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(versionId)) versionId = "fabric-loader-" + loaderVersion + "-1.12.2";
+
+            // Force all Legacy Fabric library roots to the currently working repository.
+            object[] rawLibraries = profile.ContainsKey("libraries") ? AsObjectArray(profile["libraries"]) : new object[0];
+            foreach (object raw in rawLibraries)
+            {
+                Dictionary<string, object> library = AsDictionary(raw);
+                if (library == null || !library.ContainsKey("url")) continue;
+                string currentUrl = Convert.ToString(library["url"], CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(currentUrl) && currentUrl.IndexOf("legacyfabric", StringComparison.OrdinalIgnoreCase) >= 0)
+                    library["url"] = LegacyFabricMavenUrl;
+            }
+            profile["id"] = versionId;
+            profileJson = serializer.Serialize(profile);
+
+            SetLauncherProgress(28, "Создаю профиль Legacy Fabric 1.12.2…");
+            string versionDirectory = Path.Combine(minecraftDirectory, "versions", versionId);
+            Directory.CreateDirectory(versionDirectory);
+            File.WriteAllText(Path.Combine(versionDirectory, versionId + ".json"), profileJson, new UTF8Encoding(false));
+
+            await DownloadLegacyFabricLibraries(profile, 35, 88);
+
+            SetLauncherProgress(91, "Создаю отдельный профиль Velvet…");
+            EnsureVelvetLauncherProfile(versionId);
+            Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
+            return versionId;
+        }
+
         private async void DownloadVelvetMinecraft()
         {
             if (launcherDownloadBusy) return;
@@ -1181,81 +1355,13 @@ namespace VelvetVault
                     return;
                 }
 
-                string installerPath = Path.Combine(velvetLauncherDirectory, "legacy-fabric-installer-0.11.1.exe");
-                SetLauncherProgress(4, "Подготовка загрузки…");
+                SetLauncherProgress(3, "Подготавливаю Minecraft 1.12.2 Legacy Fabric…");
+                await InstallLegacyFabricDirectly();
 
-                if (!File.Exists(installerPath))
-                {
-                    SetLauncherProgress(5, "Скачиваю Legacy Fabric installer…");
-                    using (WebClient client = new WebClient())
-                    {
-                        client.Headers.Add(HttpRequestHeader.UserAgent, "VelvetLauncher/2.1");
-                        client.DownloadProgressChanged += delegate(object sender, DownloadProgressChangedEventArgs e)
-                        {
-                            int mapped = 5 + (int)Math.Round(e.ProgressPercentage * 0.20);
-                            Dispatcher.BeginInvoke(new Action(delegate { SetLauncherProgress(mapped, "Скачиваю установщик Legacy Fabric…"); }));
-                        };
-                        await client.DownloadFileTaskAsync(new Uri(LegacyFabricInstallerUrl), installerPath);
-                    }
-                }
-
-                SetLauncherProgress(27, "Устанавливаю Legacy Fabric 1.12.2 в фоне…");
-
-                ProcessStartInfo installerInfo = new ProcessStartInfo
-                {
-                    FileName = installerPath,
-                    Arguments = "client -dir \"" + minecraftDirectory + "\" -mcversion 1.12.2 -noprofile -mavenurl " + LegacyFabricMavenUrl,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    WorkingDirectory = velvetLauncherDirectory
-                };
-
-                StringBuilder output = new StringBuilder();
-                int installPercent = 27;
-                using (Process installer = new Process())
-                {
-                    installer.StartInfo = installerInfo;
-                    installer.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
-                    {
-                        if (string.IsNullOrWhiteSpace(e.Data)) return;
-                        lock (output) output.AppendLine(e.Data);
-                        Dispatcher.BeginInvoke(new Action(delegate
-                        {
-                            if (installPercent < 88) installPercent = Math.Min(88, installPercent + 2);
-                            SetLauncherProgress(installPercent, "Устанавливаю библиотеки Legacy Fabric…");
-                        }));
-                    };
-                    installer.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
-                    {
-                        if (string.IsNullOrWhiteSpace(e.Data)) return;
-                        lock (output) output.AppendLine(e.Data);
-                    };
-
-                    if (!installer.Start()) throw new InvalidOperationException("Не удалось запустить Legacy Fabric installer.");
-                    installer.BeginOutputReadLine();
-                    installer.BeginErrorReadLine();
-                    await Task.Run(delegate { installer.WaitForExit(); });
-
-                    if (installer.ExitCode != 0)
-                    {
-                        string details;
-                        lock (output) details = output.ToString();
-                        throw new InvalidOperationException(string.IsNullOrWhiteSpace(details) ? "Legacy Fabric installer завершился с ошибкой." : details.Trim());
-                    }
-                }
-
-                SetLauncherProgress(91, "Создаю отдельный профиль Velvet…");
-                string versionId = FindLegacyFabric1122ProfileName();
-                if (string.IsNullOrWhiteSpace(versionId)) throw new InvalidOperationException("Legacy Fabric 1.12.2 не появился после установки.");
-
-                EnsureVelvetLauncherProfile(versionId);
-                SetLauncherProgress(97, "Создаю отдельную папку mods…");
+                SetLauncherProgress(97, "Проверяю папку Velvet / mods…");
                 Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
+                await Task.Delay(200);
 
-                await Task.Delay(250);
                 SetLauncherProgress(100, "Готово · Velvet 1.12.2 Fabric установлен");
                 launcherLaunchButton.IsEnabled = true;
                 launcherDownloadButton.Content = "↻  Переустановить";
