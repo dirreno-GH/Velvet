@@ -1131,36 +1131,86 @@ namespace VelvetVault
             File.Copy(source, target, true);
         }
 
+        private static bool IsMinecraft1122Root(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return false;
+            try
+            {
+                string versionDir = Path.Combine(root, "versions", "1.12.2");
+                return File.Exists(Path.Combine(versionDir, "1.12.2.json"))
+                    && File.Exists(Path.Combine(versionDir, "1.12.2.jar"))
+                    && Directory.Exists(Path.Combine(root, "libraries"))
+                    && Directory.Exists(Path.Combine(root, "assets"));
+            }
+            catch { return false; }
+        }
+
         private string FindLocalMinecraft1122Root()
         {
             List<string> roots = new List<string>();
-            roots.Add(minecraftDirectory);
+            Action<string> add = delegate(string path)
+            {
+                if (!string.IsNullOrWhiteSpace(path) && !roots.Any(x => string.Equals(x, path, StringComparison.OrdinalIgnoreCase)))
+                    roots.Add(path);
+            };
 
             string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string[] known = new string[]
-            {
-                Path.Combine(roaming, ".tlauncher", "legacy", "Minecraft", "game"),
-                Path.Combine(roaming, ".tlauncher", "minecraft"),
-                Path.Combine(roaming, ".minecraft"),
-                Path.Combine(local, "Packages", "Microsoft.4297127D64EC6_8wekyb3d8bbwe", "LocalCache", "Local", "game")
-            };
-            foreach (string root in known)
-                if (!string.IsNullOrWhiteSpace(root) && !roots.Contains(root, StringComparer.OrdinalIgnoreCase)) roots.Add(root);
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-            foreach (string root in roots)
+            add(minecraftDirectory);
+            add(Path.Combine(roaming, ".minecraft"));
+            add(Path.Combine(roaming, ".tlauncher", "legacy", "Minecraft", "game"));
+            add(Path.Combine(roaming, ".tlauncher", "minecraft"));
+            add(Path.Combine(roaming, ".legacylauncher", "minecraft"));
+            add(Path.Combine(roaming, "LegacyLauncher", "minecraft"));
+            add(Path.Combine(roaming, "PrismLauncher"));
+            add(Path.Combine(roaming, "MultiMC"));
+            add(Path.Combine(roaming, "ATLauncher"));
+            add(Path.Combine(roaming, "HMCL"));
+            add(Path.Combine(roaming, "Millida"));
+            add(Path.Combine(roaming, "millida"));
+            add(Path.Combine(local, "Millida"));
+            add(Path.Combine(local, "millida"));
+            add(Path.Combine(home, "Minecraft"));
+            add(Path.Combine(home, ".minecraft"));
+
+            string[] parentRoots = new string[] { roaming, local };
+            foreach (string parent in parentRoots)
             {
+                if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent)) continue;
                 try
                 {
-                    string versionDir = Path.Combine(root, "versions", "1.12.2");
-                    if (File.Exists(Path.Combine(versionDir, "1.12.2.json"))
-                        && File.Exists(Path.Combine(versionDir, "1.12.2.jar"))
-                        && Directory.Exists(Path.Combine(root, "libraries"))
-                        && Directory.Exists(Path.Combine(root, "assets")))
-                        return root;
+                    foreach (string child in Directory.GetDirectories(parent))
+                    {
+                        add(child);
+                        add(Path.Combine(child, ".minecraft"));
+                        add(Path.Combine(child, "minecraft"));
+                        add(Path.Combine(child, "Minecraft"));
+                        add(Path.Combine(child, "game"));
+                        add(Path.Combine(child, "data"));
+
+                        try
+                        {
+                            foreach (string grandChild in Directory.GetDirectories(child))
+                            {
+                                string name = Path.GetFileName(grandChild);
+                                if (name.Equals("minecraft", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals(".minecraft", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("game", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("data", StringComparison.OrdinalIgnoreCase))
+                                    add(grandChild);
+                            }
+                        }
+                        catch { }
+                    }
                 }
                 catch { }
             }
+
+            foreach (string root in roots)
+                if (IsMinecraft1122Root(root)) return root;
+
             return null;
         }
 
@@ -1329,7 +1379,7 @@ namespace VelvetVault
             {
                 string source = FindLocalMinecraft1122Root();
                 SetLauncherProgress(fabricInstalled ? 80 : 0, source == null
-                    ? "Папки Velvet созданы · локальная Minecraft 1.12.2 для импорта пока не найдена"
+                    ? (fabricInstalled ? "Legacy Fabric установлен · локальная Minecraft 1.12.2 для импорта пока не найдена" : "Папки Velvet созданы · нажмите «Подготовить 1.12.2 + Fabric»")
                     : "Найдена локальная Minecraft 1.12.2 · нажмите «Подготовить», Velvet скопирует её в свою папку");
             }
             else if (!javaFound)
@@ -1510,6 +1560,20 @@ namespace VelvetVault
             return versionId;
         }
 
+        private void WriteLauncherLog(string message)
+        {
+            try
+            {
+                EnsureVelvetGameFolders();
+                string log = Path.Combine(velvetGameDirectory, "logs", "velvet-launcher.log");
+                File.AppendAllText(log,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                    + "  " + (message ?? "") + Environment.NewLine,
+                    Encoding.UTF8);
+            }
+            catch { }
+        }
+
         private async void DownloadVelvetMinecraft()
         {
             if (launcherDownloadBusy) return;
@@ -1522,32 +1586,48 @@ namespace VelvetVault
                 Directory.CreateDirectory(velvetLauncherDirectory);
                 EnsureVelvetGameFolders();
                 launcherModsPathText.Text = velvetGameDirectory;
+                WriteLauncherLog("Начало подготовки Velvet Minecraft 1.12.2.");
 
-                if (!HasVelvetMinecraft1122Files())
+                SetLauncherProgress(5, "Устанавливаю Legacy Fabric 1.12.2 в папку Velvet…");
+                string fabricVersion = await InstallLegacyFabricDirectly();
+                WriteLauncherLog("Legacy Fabric установлен: " + fabricVersion);
+
+                bool imported = HasVelvetMinecraft1122Files();
+                if (!imported)
                 {
-                    SetLauncherProgress(4, "Импортирую локальные файлы Minecraft 1.12.2 в папку Velvet…");
+                    SetLauncherProgress(70, "Fabric установлен · ищу локальную Minecraft 1.12.2 для импорта…");
                     string sourceRoot = FindLocalMinecraft1122Root();
-                    if (sourceRoot == null)
-                        throw new FileNotFoundException("Не найдена локальная Minecraft 1.12.2. Установите/запустите её в имеющемся лаунчере или поместите 1.12.2.jar и 1.12.2.json в папку Velvet\\Minecraft\\versions\\1.12.2.");
-                    await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceRoot); });
+                    if (sourceRoot != null)
+                    {
+                        WriteLauncherLog("Найдена локальная Minecraft 1.12.2: " + sourceRoot);
+                        await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceRoot); });
+                        imported = HasVelvetMinecraft1122Files();
+                    }
                 }
 
-                SetLauncherProgress(35, "Устанавливаю Legacy Fabric в папку Velvet…");
-                await InstallLegacyFabricDirectly();
+                EnsureVelvetGameFolders();
 
-                SetLauncherProgress(97, "Проверяю структуру папки Velvet Minecraft…");
-                Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
-                await Task.Delay(200);
-
-                SetLauncherProgress(100, "Готово · Velvet 1.12.2 Fabric установлен");
-                launcherLaunchButton.IsEnabled = true;
-                launcherDownloadButton.Content = "↻  Переустановить";
-                ShowToast("Minecraft 1.12.2 Legacy Fabric установлен");
+                if (imported)
+                {
+                    SetLauncherProgress(100, "Готово · Minecraft 1.12.2 + Legacy Fabric подготовлены");
+                    launcherDownloadButton.Content = "↻  Переустановить Fabric";
+                    ShowToast("Minecraft 1.12.2 + Legacy Fabric готовы");
+                    WriteLauncherLog("Подготовка завершена успешно.");
+                }
+                else
+                {
+                    SetLauncherProgress(100, "Legacy Fabric установлен · базовая Minecraft 1.12.2 на ПК не найдена");
+                    launcherDownloadButton.Content = "↻  Переустановить Fabric";
+                    ShowToast("Fabric установлен. Для запуска нужна локальная Minecraft 1.12.2");
+                    WriteLauncherLog("Fabric установлен, но базовая Minecraft 1.12.2 для импорта не найдена.");
+                }
             }
             catch (Exception ex)
             {
-                SetLauncherProgress((int)(launcherProgressBar == null ? 0 : launcherProgressBar.Value), "Ошибка: " + ShortLauncherError(ex.Message));
-                ShowToast("Не удалось установить Legacy Fabric 1.12.2");
+                string details = ex.GetType().Name + ": " + ex.Message;
+                WriteLauncherLog("ОШИБКА: " + details + Environment.NewLine + ex.StackTrace);
+                SetLauncherProgress((int)(launcherProgressBar == null ? 0 : launcherProgressBar.Value), "Ошибка Fabric: " + ShortLauncherError(ex.Message));
+                ShowToast("Ошибка Fabric: " + ShortLauncherError(ex.Message));
             }
             finally
             {
