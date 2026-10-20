@@ -1164,14 +1164,14 @@ namespace VelvetVault
                     speechSynthesizer = new System.Speech.Synthesis.SpeechSynthesizer();
                     speechSynthesizer.Volume = 100;
                     speechSynthesizer.Rate = -1;
+                    System.Speech.Synthesis.InstalledVoice russianVoice = null;
                     foreach (System.Speech.Synthesis.InstalledVoice installed in speechSynthesizer.GetInstalledVoices())
                     {
-                        if (installed.Enabled && installed.VoiceInfo != null && installed.VoiceInfo.Culture != null && installed.VoiceInfo.Culture.TwoLetterISOLanguageName == "ru")
-                        {
-                            speechSynthesizer.SelectVoice(installed.VoiceInfo.Name);
-                            break;
-                        }
+                        if (!installed.Enabled || installed.VoiceInfo == null || installed.VoiceInfo.Culture == null || installed.VoiceInfo.Culture.TwoLetterISOLanguageName != "ru") continue;
+                        if (russianVoice == null) russianVoice = installed;
+                        if (installed.VoiceInfo.Gender == System.Speech.Synthesis.VoiceGender.Female) { russianVoice = installed; break; }
                     }
+                    if (russianVoice != null) speechSynthesizer.SelectVoice(russianVoice.VoiceInfo.Name);
                 }
                 speechSynthesizer.SpeakAsyncCancelAll();
                 speechSynthesizer.SpeakAsync(message);
