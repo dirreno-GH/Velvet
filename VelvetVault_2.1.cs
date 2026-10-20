@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Reflection;
@@ -414,6 +415,7 @@ namespace VelvetVault
         private TextBlock launcherProgressText;
         private TextBlock launcherStatusText;
         private TextBlock launcherModsPathText;
+        private TextBox launcherNicknameInput;
         private bool launcherDownloadBusy;
         private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
         private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
@@ -720,6 +722,9 @@ namespace VelvetVault
                 </Grid>
               </Border>
 
+              <TextBlock Style='{StaticResource Label}' Text='ЛОКАЛЬНЫЙ НИК'/>
+              <TextBox x:Name='LauncherNicknameInput' Text='Player' Style='{StaticResource Field}' Height='46' Margin='0,0,0,16' ToolTip='3–16 символов: A-Z, a-z, 0-9 и _'/>
+
               <TextBlock Style='{StaticResource Label}' Text='ПАПКА VELVET / MODS'/>
               <Border Background='{DynamicResource FieldBrush}' BorderBrush='{DynamicResource FieldBorderBrush}' BorderThickness='1' CornerRadius='12' Padding='14,12' Margin='0,0,0,18'>
                 <TextBlock x:Name='LauncherModsPathText' Foreground='{DynamicResource Ink}' FontSize='12' TextWrapping='Wrap'/>
@@ -743,7 +748,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Velvet сам скачивает Legacy Fabric 1.12.2 в фоне — отдельный установщик Fabric больше не запускается. Моды Velvet хранятся отдельно от других лаунчеров. После установки кнопка «Запустить» откроет официальный Minecraft Launcher с профилем Velvet 1.12.2 Fabric.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Velvet сам ставит Legacy Fabric 1.12.2 и запускает игру напрямую через Java — Microsoft Launcher не открывается. Используются уже установленные на ПК файлы Minecraft 1.12.2. Локальный режим подходит для серверов, которые разрешают offline-профили.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -901,7 +906,7 @@ namespace VelvetVault
             dialogOverlay = Find<Grid>("DialogOverlay"); dialogCard = Find<Border>("DialogCard"); dialogTitle = Find<TextBlock>("DialogTitle"); dialogMessage = Find<TextBlock>("DialogMessage"); dialogCancelButton = Find<Button>("DialogCancelButton"); dialogConfirmButton = Find<Button>("DialogConfirmButton");
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
-            launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText");
+            launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText"); launcherNicknameInput = Find<TextBox>("LauncherNicknameInput");
             launcherModsPathText.Text = Path.Combine(velvetGameDirectory, "mods");
             lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput"); lessonDaySelector = Find<ComboBox>("LessonDaySelector");
             pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput"); pairDaySelector = Find<ComboBox>("PairDaySelector");
@@ -1107,17 +1112,18 @@ namespace VelvetVault
             File.WriteAllText(profilesPath, serializer.Serialize(root));
         }
 
+        private bool HasLocalMinecraft1122Files()
+        {
+            string versionDir = Path.Combine(minecraftDirectory, "versions", "1.12.2");
+            return File.Exists(Path.Combine(versionDir, "1.12.2.json"))
+                && File.Exists(Path.Combine(versionDir, "1.12.2.jar"))
+                && Directory.Exists(Path.Combine(minecraftDirectory, "libraries"))
+                && Directory.Exists(Path.Combine(minecraftDirectory, "assets"));
+        }
+
         private bool IsVelvetLauncherReady()
         {
-            string versionId = FindLegacyFabric1122ProfileName();
-            if (string.IsNullOrWhiteSpace(versionId)) return false;
-            if (GetMinecraftLauncherProfilesPath() == null) return false;
-            try
-            {
-                EnsureVelvetLauncherProfile(versionId);
-                return true;
-            }
-            catch { return false; }
+            return IsLegacyFabric1122Installed() && HasLocalMinecraft1122Files() && !string.IsNullOrWhiteSpace(FindJavaExecutable());
         }
 
         private void SetLauncherProgress(int percent, string status)
@@ -1135,28 +1141,23 @@ namespace VelvetVault
             Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
             launcherModsPathText.Text = Path.Combine(velvetGameDirectory, "mods");
 
-            bool ready = IsVelvetLauncherReady();
+            bool fabricInstalled = IsLegacyFabric1122Installed();
+            bool baseInstalled = HasLocalMinecraft1122Files();
+            bool javaFound = !string.IsNullOrWhiteSpace(FindJavaExecutable());
+            bool ready = fabricInstalled && baseInstalled && javaFound;
+
             launcherLaunchButton.IsEnabled = ready && !launcherDownloadBusy;
             launcherDownloadButton.IsEnabled = !launcherDownloadBusy;
+            launcherDownloadButton.Content = fabricInstalled ? "↻  Переустановить Fabric" : "↓  Скачать Fabric";
 
             if (ready)
-            {
-                launcherDownloadButton.Content = "↻  Переустановить";
-                if (!launcherDownloadBusy)
-                {
-                    SetLauncherProgress(100, "Готово · Minecraft 1.12.2 Legacy Fabric установлен");
-                }
-            }
+                SetLauncherProgress(100, "Готово · прямой запуск 1.12.2 Legacy Fabric доступен");
+            else if (!baseInstalled)
+                SetLauncherProgress(fabricInstalled ? 100 : 0, "Не найдены локальные файлы Minecraft 1.12.2 в %APPDATA%\\.minecraft");
+            else if (!javaFound)
+                SetLauncherProgress(fabricInstalled ? 100 : 0, "Не найдена Java. Для 1.12.2 лучше Java 8.");
             else
-            {
-                launcherDownloadButton.Content = "↓  Скачать";
-                if (!launcherDownloadBusy)
-                {
-                    SetLauncherProgress(0, GetMinecraftLauncherProfilesPath() == null
-                        ? "Сначала один раз откройте официальный Minecraft Launcher"
-                        : "Нажмите «Скачать» — установка пройдёт в фоне");
-                }
-            }
+                SetLauncherProgress(0, "Нажмите «Скачать Fabric» — установка пройдёт в фоне");
         }
 
         private static Dictionary<string, object> AsDictionary(object value)
@@ -1326,8 +1327,7 @@ namespace VelvetVault
 
             await DownloadLegacyFabricLibraries(profile, 35, 88);
 
-            SetLauncherProgress(91, "Создаю отдельный профиль Velvet…");
-            EnsureVelvetLauncherProfile(versionId);
+            SetLauncherProgress(91, "Подготавливаю отдельную папку Velvet…");
             Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
             return versionId;
         }
@@ -1346,14 +1346,6 @@ namespace VelvetVault
                 Directory.CreateDirectory(velvetGameDirectory);
                 Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
                 launcherModsPathText.Text = Path.Combine(velvetGameDirectory, "mods");
-
-                if (GetMinecraftLauncherProfilesPath() == null)
-                {
-                    SetLauncherProgress(0, "Нужно один раз открыть официальный Minecraft Launcher");
-                    OpenOfficialMinecraftLauncher();
-                    ShowToast("Откройте Minecraft Launcher, войдите в аккаунт и вернитесь в Velvet");
-                    return;
-                }
 
                 SetLauncherProgress(3, "Подготавливаю Minecraft 1.12.2 Legacy Fabric…");
                 await InstallLegacyFabricDirectly();
@@ -1380,27 +1372,351 @@ namespace VelvetVault
             }
         }
 
+        private static bool IsValidOfflineNickname(string nickname)
+        {
+            if (string.IsNullOrWhiteSpace(nickname) || nickname.Length < 3 || nickname.Length > 16) return false;
+            foreach (char c in nickname)
+                if (!(char.IsLetterOrDigit(c) || c == '_')) return false;
+            return true;
+        }
+
+        private static string OfflineUuid(string nickname)
+        {
+            using (MD5 md5 = MD5.Create())
+            {
+                byte[] hash = md5.ComputeHash(Encoding.UTF8.GetBytes("OfflinePlayer:" + nickname));
+                hash[6] = (byte)((hash[6] & 0x0F) | 0x30);
+                hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
+                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
+        }
+
+        private string FindJavaExecutable()
+        {
+            List<string> candidates = new List<string>();
+            string javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+            if (!string.IsNullOrWhiteSpace(javaHome))
+            {
+                candidates.Add(Path.Combine(javaHome, "bin", "javaw.exe"));
+                candidates.Add(Path.Combine(javaHome, "bin", "java.exe"));
+            }
+
+            string runtimeRoot = Path.Combine(minecraftDirectory, "runtime");
+            if (Directory.Exists(runtimeRoot))
+            {
+                try
+                {
+                    foreach (string javaw in Directory.GetFiles(runtimeRoot, "javaw.exe", SearchOption.AllDirectories))
+                    {
+                        if (javaw.IndexOf("jre-legacy", StringComparison.OrdinalIgnoreCase) >= 0) candidates.Insert(0, javaw);
+                        else candidates.Add(javaw);
+                    }
+                }
+                catch { }
+            }
+
+            string[] roots = new string[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) };
+            foreach (string root in roots)
+            {
+                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
+                foreach (string vendor in new string[] { "Java", "Eclipse Adoptium", "Microsoft" })
+                {
+                    string vendorRoot = Path.Combine(root, vendor);
+                    if (!Directory.Exists(vendorRoot)) continue;
+                    try
+                    {
+                        foreach (string dir in Directory.GetDirectories(vendorRoot))
+                        {
+                            candidates.Add(Path.Combine(dir, "bin", "javaw.exe"));
+                            candidates.Add(Path.Combine(dir, "bin", "java.exe"));
+                            try
+                            {
+                                foreach (string sub in Directory.GetDirectories(dir))
+                                {
+                                    candidates.Add(Path.Combine(sub, "bin", "javaw.exe"));
+                                    candidates.Add(Path.Combine(sub, "bin", "java.exe"));
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            foreach (string candidate in candidates)
+                if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate)) return candidate;
+
+            try
+            {
+                ProcessStartInfo whereInfo = new ProcessStartInfo { FileName = "where.exe", Arguments = "javaw.exe", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+                using (Process p = Process.Start(whereInfo))
+                {
+                    string line = p.StandardOutput.ReadLine();
+                    p.WaitForExit();
+                    if (!string.IsNullOrWhiteSpace(line) && File.Exists(line.Trim())) return line.Trim();
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static bool LibraryAllowedOnWindows(Dictionary<string, object> library)
+        {
+            if (library == null || !library.ContainsKey("rules")) return true;
+            object[] rules = AsObjectArray(library["rules"]);
+            bool allowed = false;
+            foreach (object raw in rules)
+            {
+                Dictionary<string, object> rule = AsDictionary(raw);
+                if (rule == null) continue;
+                bool matches = true;
+                object osObject;
+                if (rule.TryGetValue("os", out osObject))
+                {
+                    Dictionary<string, object> os = AsDictionary(osObject);
+                    if (os != null && os.ContainsKey("name"))
+                    {
+                        string name = Convert.ToString(os["name"], CultureInfo.InvariantCulture);
+                        matches = string.Equals(name, "windows", StringComparison.OrdinalIgnoreCase);
+                    }
+                }
+                if (rule.ContainsKey("features")) matches = false;
+                if (!matches) continue;
+                string action = rule.ContainsKey("action") ? Convert.ToString(rule["action"], CultureInfo.InvariantCulture) : "allow";
+                allowed = string.Equals(action, "allow", StringComparison.OrdinalIgnoreCase);
+            }
+            return allowed;
+        }
+
+        private string ResolveLibraryArtifact(Dictionary<string, object> library)
+        {
+            if (library == null || !LibraryAllowedOnWindows(library)) return null;
+            object downloadsObject;
+            if (library.TryGetValue("downloads", out downloadsObject))
+            {
+                Dictionary<string, object> downloads = AsDictionary(downloadsObject);
+                if (downloads != null)
+                {
+                    object artifactObject;
+                    if (downloads.TryGetValue("artifact", out artifactObject))
+                    {
+                        Dictionary<string, object> artifact = AsDictionary(artifactObject);
+                        if (artifact != null && artifact.ContainsKey("path"))
+                        {
+                            string relative = Convert.ToString(artifact["path"], CultureInfo.InvariantCulture).Replace('/', Path.DirectorySeparatorChar);
+                            string path = Path.Combine(minecraftDirectory, "libraries", relative);
+                            return File.Exists(path) ? path : null;
+                        }
+                    }
+                }
+            }
+            if (library.ContainsKey("name"))
+            {
+                string relative = GetLibraryRelativePath(Convert.ToString(library["name"], CultureInfo.InvariantCulture));
+                if (!string.IsNullOrWhiteSpace(relative))
+                {
+                    string path = Path.Combine(minecraftDirectory, "libraries", relative);
+                    if (File.Exists(path)) return path;
+                }
+            }
+            return null;
+        }
+
+        private string ResolveWindowsNativeJar(Dictionary<string, object> library)
+        {
+            if (library == null || !LibraryAllowedOnWindows(library) || !library.ContainsKey("natives")) return null;
+            Dictionary<string, object> natives = AsDictionary(library["natives"]);
+            if (natives == null || !natives.ContainsKey("windows")) return null;
+            string classifier = Convert.ToString(natives["windows"], CultureInfo.InvariantCulture).Replace("$"+"{arch}", Environment.Is64BitOperatingSystem ? "64" : "32");
+
+            object downloadsObject;
+            if (library.TryGetValue("downloads", out downloadsObject))
+            {
+                Dictionary<string, object> downloads = AsDictionary(downloadsObject);
+                if (downloads != null && downloads.ContainsKey("classifiers"))
+                {
+                    Dictionary<string, object> classifiers = AsDictionary(downloads["classifiers"]);
+                    if (classifiers != null && classifiers.ContainsKey(classifier))
+                    {
+                        Dictionary<string, object> nativeInfo = AsDictionary(classifiers[classifier]);
+                        if (nativeInfo != null && nativeInfo.ContainsKey("path"))
+                        {
+                            string relative = Convert.ToString(nativeInfo["path"], CultureInfo.InvariantCulture).Replace('/', Path.DirectorySeparatorChar);
+                            string path = Path.Combine(minecraftDirectory, "libraries", relative);
+                            if (File.Exists(path)) return path;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private void CollectLibraries(Dictionary<string, object> profile, List<string> classPath, List<string> nativeJars)
+        {
+            if (profile == null || !profile.ContainsKey("libraries")) return;
+            foreach (object raw in AsObjectArray(profile["libraries"]))
+            {
+                Dictionary<string, object> library = AsDictionary(raw);
+                if (library == null || !LibraryAllowedOnWindows(library)) continue;
+                string artifact = ResolveLibraryArtifact(library);
+                if (!string.IsNullOrWhiteSpace(artifact) && !classPath.Any(p => string.Equals(p, artifact, StringComparison.OrdinalIgnoreCase))) classPath.Add(artifact);
+                string nativeJar = ResolveWindowsNativeJar(library);
+                if (!string.IsNullOrWhiteSpace(nativeJar) && !nativeJars.Any(p => string.Equals(p, nativeJar, StringComparison.OrdinalIgnoreCase))) nativeJars.Add(nativeJar);
+            }
+        }
+
+        private string PrepareNatives(List<string> nativeJars)
+        {
+            string nativesDir = Path.Combine(velvetLauncherDirectory, "natives-1.12.2");
+            if (Directory.Exists(nativesDir)) { try { Directory.Delete(nativesDir, true); } catch { } }
+            Directory.CreateDirectory(nativesDir);
+            foreach (string jar in nativeJars)
+            {
+                using (FileStream stream = File.OpenRead(jar))
+                using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read))
+                {
+                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    {
+                        if (string.IsNullOrWhiteSpace(entry.Name)) continue;
+                        if (entry.FullName.StartsWith("META-INF/", StringComparison.OrdinalIgnoreCase)) continue;
+                        string destination = Path.Combine(nativesDir, Path.GetFileName(entry.Name));
+                        using (Stream source = entry.Open())
+                        using (FileStream target = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+                            source.CopyTo(target);
+                    }
+                }
+            }
+            return nativesDir;
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            if (value == null) return "\"\"";
+            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
+        private static string ReadString(Dictionary<string, object> data, string key, string fallback)
+        {
+            object value;
+            if (data != null && data.TryGetValue(key, out value))
+            {
+                string text = Convert.ToString(value, CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(text)) return text;
+            }
+            return fallback;
+        }
+
+        private string BuildOfflineGameArguments(Dictionary<string, object> vanilla, Dictionary<string, object> fabric, string nickname, string versionId)
+        {
+            string arguments = ReadString(vanilla, "minecraftArguments",
+                "--username $"+"{auth_player_name} --version $"+"{version_name} --gameDir $"+"{game_directory} --assetsDir $"+"{assets_root} --assetIndex $"+"{assets_index_name} --uuid $"+"{auth_uuid} --accessToken $"+"{auth_access_token} --userType $"+"{user_type} --versionType $"+"{version_type}");
+
+            string assetIndex = "1.12";
+            object assetIndexObject;
+            if (vanilla.TryGetValue("assetIndex", out assetIndexObject))
+            {
+                Dictionary<string, object> asset = AsDictionary(assetIndexObject);
+                if (asset != null) assetIndex = ReadString(asset, "id", assetIndex);
+            }
+
+            Dictionary<string, string> replacements = new Dictionary<string, string>
+            {
+                { "$"+"{auth_player_name}", QuoteArgument(nickname) },
+                { "$"+"{version_name}", QuoteArgument(versionId) },
+                { "$"+"{game_directory}", QuoteArgument(velvetGameDirectory) },
+                { "$"+"{assets_root}", QuoteArgument(Path.Combine(minecraftDirectory, "assets")) },
+                { "$"+"{assets_index_name}", QuoteArgument(assetIndex) },
+                { "$"+"{auth_uuid}", QuoteArgument(OfflineUuid(nickname)) },
+                { "$"+"{auth_access_token}", QuoteArgument("0") },
+                { "$"+"{user_type}", QuoteArgument("legacy") },
+                { "$"+"{version_type}", QuoteArgument("release") },
+                { "$"+"{user_properties}", QuoteArgument("{}") }
+            };
+            foreach (KeyValuePair<string, string> item in replacements) arguments = arguments.Replace(item.Key, item.Value);
+            return arguments;
+        }
+
         private void LaunchVelvetMinecraft()
         {
-            if (!IsVelvetLauncherReady())
+            string nickname = launcherNicknameInput == null ? "Player" : launcherNicknameInput.Text.Trim();
+            if (!IsValidOfflineNickname(nickname))
             {
-                SetLauncherProgress((int)launcherProgressBar.Value, "Сначала нажмите «Скачать»");
-                ShowToast("Сначала установите Minecraft 1.12.2 Fabric");
+                launcherStatusText.Text = "Ник должен быть 3–16 символов: буквы, цифры и _";
+                ShowToast("Проверьте локальный ник");
+                return;
+            }
+            if (!IsLegacyFabric1122Installed())
+            {
+                SetLauncherProgress((int)launcherProgressBar.Value, "Сначала нажмите «Скачать Fabric»");
+                ShowToast("Сначала установите Legacy Fabric 1.12.2");
+                return;
+            }
+            if (!HasLocalMinecraft1122Files())
+            {
+                launcherStatusText.Text = "Не найдены локальные файлы Minecraft 1.12.2 в %APPDATA%\\.minecraft";
+                ShowToast("Нужна уже установленная Minecraft 1.12.2");
+                return;
+            }
+
+            string java = FindJavaExecutable();
+            if (string.IsNullOrWhiteSpace(java))
+            {
+                launcherStatusText.Text = "Java не найдена. Для Minecraft 1.12.2 рекомендуется Java 8.";
+                ShowToast("Не найдена Java");
                 return;
             }
 
             try
             {
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                string vanillaJsonPath = Path.Combine(minecraftDirectory, "versions", "1.12.2", "1.12.2.json");
                 string versionId = FindLegacyFabric1122ProfileName();
-                EnsureVelvetLauncherProfile(versionId);
-                launcherStatusText.Text = "Открываю официальный Minecraft Launcher с профилем Velvet";
-                OpenOfficialMinecraftLauncher();
-                ShowToast("Выберите профиль «Velvet 1.12.2 Fabric» и нажмите Играть");
+                string fabricJsonPath = Path.Combine(minecraftDirectory, "versions", versionId, versionId + ".json");
+                Dictionary<string, object> vanilla = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(vanillaJsonPath));
+                Dictionary<string, object> fabric = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(fabricJsonPath));
+                if (vanilla == null || fabric == null) throw new InvalidOperationException("Не удалось прочитать профиль Minecraft/Fabric.");
+
+                List<string> classPath = new List<string>();
+                List<string> nativeJars = new List<string>();
+                CollectLibraries(vanilla, classPath, nativeJars);
+                CollectLibraries(fabric, classPath, nativeJars);
+
+                string clientJar = Path.Combine(minecraftDirectory, "versions", "1.12.2", "1.12.2.jar");
+                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден локальный 1.12.2.jar.");
+                classPath.Add(clientJar);
+
+                string mainClass = ReadString(fabric, "mainClass", ReadString(vanilla, "mainClass", null));
+                if (string.IsNullOrWhiteSpace(mainClass)) throw new InvalidOperationException("Не найден mainClass для Fabric.");
+                string nativesDir = PrepareNatives(nativeJars);
+                string cp = string.Join(Path.PathSeparator.ToString(), classPath);
+                string gameArgs = BuildOfflineGameArguments(vanilla, fabric, nickname, versionId);
+
+                Directory.CreateDirectory(velvetGameDirectory);
+                Directory.CreateDirectory(Path.Combine(velvetGameDirectory, "mods"));
+
+                string jvmArgs = "-Xms512M -Xmx2048M"
+                    + " -Djava.library.path=" + QuoteArgument(nativesDir)
+                    + " -Dminecraft.launcher.brand=Velvet"
+                    + " -Dminecraft.launcher.version=2.1"
+                    + " -cp " + QuoteArgument(cp);
+
+                ProcessStartInfo info = new ProcessStartInfo
+                {
+                    FileName = java,
+                    Arguments = jvmArgs + " " + mainClass + " " + gameArgs,
+                    WorkingDirectory = velvetGameDirectory,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                Process.Start(info);
+                launcherStatusText.Text = "Minecraft 1.12.2 Legacy Fabric запущен напрямую · ник " + nickname;
+                ShowToast("Minecraft запущен");
             }
             catch (Exception ex)
             {
                 launcherStatusText.Text = "Ошибка запуска: " + ShortLauncherError(ex.Message);
-                ShowToast("Не удалось открыть Minecraft Launcher");
+                ShowToast("Не удалось запустить Minecraft");
             }
         }
 
@@ -1424,34 +1740,6 @@ namespace VelvetVault
             {
                 ShowToast("Не удалось открыть папку: " + ShortLauncherError(ex.Message));
             }
-        }
-
-        private void OpenOfficialMinecraftLauncher()
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo("minecraft://") { UseShellExecute = true });
-                return;
-            }
-            catch { }
-
-            string[] candidates = new string[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Minecraft Launcher", "MinecraftLauncher.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Minecraft Launcher", "MinecraftLauncher.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Minecraft Launcher", "MinecraftLauncher.exe")
-            };
-
-            foreach (string candidate in candidates)
-            {
-                if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
-                {
-                    Process.Start(new ProcessStartInfo(candidate) { UseShellExecute = true });
-                    return;
-                }
-            }
-
-            throw new FileNotFoundException("Официальный Minecraft Launcher не найден.");
         }
 
         private void LoadHubData()
