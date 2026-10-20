@@ -1,6 +1,6 @@
 # Velvet Vault 2.1
 
-![Velvet Vault](VelvetVault-logo.png)
+![Velvet Vault](VelvetVault-logo.svg)
 
 **Velvet Vault** — локальное Windows-приложение в стиле Velvet с набором встроенных инструментов и зашифрованным хранилищем паролей.
 
@@ -37,7 +37,7 @@
 - `VelvetVault_2.1.cs` — исходный код приложения
 - `VelvetVault.csproj` — проект сборки
 - `VelvetVault.ico` — иконка приложения
-- `VelvetVault-2.1.exe` — готовая сборка
+- `VelvetVault-2.1.exe` — готовая Windows-сборка
 
 ## Безопасность
 
