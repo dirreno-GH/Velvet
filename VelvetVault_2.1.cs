@@ -1139,36 +1139,34 @@ namespace VelvetVault
             File.Copy(source, target, true);
         }
 
-        private static bool IsMinecraft1122Root(string root)
+        private static bool HasVersion1122Files(string versionDir)
         {
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return false;
-            try
-            {
-                string versionDir = Path.Combine(root, "versions", "1.12.2");
-                return File.Exists(Path.Combine(versionDir, "1.12.2.json"))
-                    && File.Exists(Path.Combine(versionDir, "1.12.2.jar"))
-                    && Directory.Exists(Path.Combine(root, "libraries"))
-                    && Directory.Exists(Path.Combine(root, "assets"));
-            }
-            catch { return false; }
+            return !string.IsNullOrWhiteSpace(versionDir)
+                && Directory.Exists(versionDir)
+                && File.Exists(Path.Combine(versionDir, "1.12.2.jar"))
+                && File.Exists(Path.Combine(versionDir, "1.12.2.json"));
         }
 
-        private string FindLocalMinecraft1122Root()
+        private static string TryInferRootFromVersionDir(string versionDir)
         {
             try
             {
-                if (File.Exists(velvetMinecraftSourcePathFile))
-                {
-                    string saved = File.ReadAllText(velvetMinecraftSourcePathFile).Trim();
-                    if (IsMinecraft1122Root(saved)) return saved;
-                }
+                DirectoryInfo version = new DirectoryInfo(versionDir);
+                DirectoryInfo versions = version.Parent;
+                DirectoryInfo root = versions == null ? null : versions.Parent;
+                return root == null ? null : root.FullName;
             }
-            catch { }
+            catch { return null; }
+        }
 
+        private List<string> GetMinecraftSearchRoots()
+        {
             List<string> roots = new List<string>();
             Action<string> add = delegate(string path)
             {
-                if (!string.IsNullOrWhiteSpace(path) && !roots.Any(x => string.Equals(x, path, StringComparison.OrdinalIgnoreCase)))
+                if (!string.IsNullOrWhiteSpace(path)
+                    && Directory.Exists(path)
+                    && !roots.Any(x => string.Equals(x, path, StringComparison.OrdinalIgnoreCase)))
                     roots.Add(path);
             };
 
@@ -1178,10 +1176,11 @@ namespace VelvetVault
 
             add(minecraftDirectory);
             add(Path.Combine(roaming, ".minecraft"));
+            add(Path.Combine(roaming, ".tlauncher"));
             add(Path.Combine(roaming, ".tlauncher", "legacy", "Minecraft", "game"));
             add(Path.Combine(roaming, ".tlauncher", "minecraft"));
-            add(Path.Combine(roaming, ".legacylauncher", "minecraft"));
-            add(Path.Combine(roaming, "LegacyLauncher", "minecraft"));
+            add(Path.Combine(roaming, ".legacylauncher"));
+            add(Path.Combine(roaming, "LegacyLauncher"));
             add(Path.Combine(roaming, "PrismLauncher"));
             add(Path.Combine(roaming, "MultiMC"));
             add(Path.Combine(roaming, "ATLauncher"));
@@ -1193,8 +1192,7 @@ namespace VelvetVault
             add(Path.Combine(home, "Minecraft"));
             add(Path.Combine(home, ".minecraft"));
 
-            string[] parentRoots = new string[] { roaming, local };
-            foreach (string parent in parentRoots)
+            foreach (string parent in new string[] { roaming, local })
             {
                 if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent)) continue;
                 try
@@ -1210,14 +1208,15 @@ namespace VelvetVault
 
                         try
                         {
-                            foreach (string grandChild in Directory.GetDirectories(child))
+                            foreach (string grand in Directory.GetDirectories(child))
                             {
-                                string name = Path.GetFileName(grandChild);
-                                if (name.Equals("minecraft", StringComparison.OrdinalIgnoreCase)
-                                    || name.Equals(".minecraft", StringComparison.OrdinalIgnoreCase)
+                                string name = Path.GetFileName(grand);
+                                if (name.Equals(".minecraft", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("minecraft", StringComparison.OrdinalIgnoreCase)
                                     || name.Equals("game", StringComparison.OrdinalIgnoreCase)
-                                    || name.Equals("data", StringComparison.OrdinalIgnoreCase))
-                                    add(grandChild);
+                                    || name.Equals("data", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("instances", StringComparison.OrdinalIgnoreCase))
+                                    add(grand);
                             }
                         }
                         catch { }
@@ -1226,10 +1225,83 @@ namespace VelvetVault
                 catch { }
             }
 
+            return roots;
+        }
+
+        private string FindVersion1122Directory()
+        {
+            try
+            {
+                if (File.Exists(velvetMinecraftSourcePathFile))
+                {
+                    string saved = File.ReadAllText(velvetMinecraftSourcePathFile).Trim();
+                    if (HasVersion1122Files(saved)) return saved;
+                    string savedVersion = Path.Combine(saved, "versions", "1.12.2");
+                    if (HasVersion1122Files(savedVersion)) return savedVersion;
+                }
+            }
+            catch { }
+
+            List<string> roots = GetMinecraftSearchRoots();
+
             foreach (string root in roots)
-                if (IsMinecraft1122Root(root)) return root;
+            {
+                string direct = Path.Combine(root, "versions", "1.12.2");
+                if (HasVersion1122Files(direct)) return direct;
+
+                string direct2 = Path.Combine(root, "1.12.2");
+                if (HasVersion1122Files(direct2)) return direct2;
+            }
+
+            foreach (string root in roots)
+            {
+                try
+                {
+                    foreach (string jar in Directory.GetFiles(root, "1.12.2.jar", SearchOption.AllDirectories))
+                    {
+                        if (jar.StartsWith(velvetGameDirectory, StringComparison.OrdinalIgnoreCase)) continue;
+                        string dir = Path.GetDirectoryName(jar);
+                        if (HasVersion1122Files(dir)) return dir;
+                    }
+                }
+                catch { }
+            }
 
             return null;
+        }
+
+        private string FindMinecraftDataRoot(string folderName, string preferredRoot)
+        {
+            if (!string.IsNullOrWhiteSpace(preferredRoot)
+                && Directory.Exists(Path.Combine(preferredRoot, folderName)))
+                return preferredRoot;
+
+            foreach (string root in GetMinecraftSearchRoots())
+            {
+                if (Directory.Exists(Path.Combine(root, folderName))) return root;
+            }
+
+            foreach (string root in GetMinecraftSearchRoots())
+            {
+                try
+                {
+                    foreach (string dir in Directory.GetDirectories(root, folderName, SearchOption.AllDirectories))
+                    {
+                        if (dir.StartsWith(velvetGameDirectory, StringComparison.OrdinalIgnoreCase)) continue;
+                        DirectoryInfo parent = Directory.GetParent(dir);
+                        if (parent != null) return parent.FullName;
+                    }
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private string FindLocalMinecraft1122Root()
+        {
+            string versionDir = FindVersion1122Directory();
+            return TryInferRootFromVersionDir(versionDir);
         }
 
         private async void ChooseMinecraft1122Source()
@@ -1247,34 +1319,30 @@ namespace VelvetVault
                 if (dialog.ShowDialog(this) != true) return;
 
                 string versionDir = Path.GetDirectoryName(dialog.FileName);
-                DirectoryInfo versionsDir = string.IsNullOrWhiteSpace(versionDir) ? null : Directory.GetParent(versionDir);
-                DirectoryInfo rootDir = versionsDir == null ? null : versionsDir.Parent;
-                string sourceRoot = rootDir == null ? null : rootDir.FullName;
-
-                if (!IsMinecraft1122Root(sourceRoot))
+                if (!HasVersion1122Files(versionDir))
                 {
-                    launcherStatusText.Text = "Выбранный файл не относится к полной установленной Minecraft 1.12.2";
-                    ShowToast("Нужна папка с versions, libraries и assets");
+                    launcherStatusText.Text = "Рядом с выбранным 1.12.2.jar не найден 1.12.2.json";
+                    ShowToast("Выберите 1.12.2.jar из папки версии Minecraft");
                     return;
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(velvetMinecraftSourcePathFile));
-                File.WriteAllText(velvetMinecraftSourcePathFile, sourceRoot, Encoding.UTF8);
+                File.WriteAllText(velvetMinecraftSourcePathFile, versionDir, Encoding.UTF8);
 
                 launcherDownloadBusy = true;
                 launcherDownloadButton.IsEnabled = false;
                 SetLauncherProgress(72, "Импортирую выбранную Minecraft 1.12.2 в папку Velvet…");
-                WriteLauncherLog("Пользователь выбрал источник Minecraft 1.12.2: " + sourceRoot);
+                WriteLauncherLog("Пользователь выбрал version-dir Minecraft 1.12.2: " + versionDir);
 
-                await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceRoot); });
+                await Task.Run(delegate { ImportMinecraft1122IntoVelvet(versionDir); });
 
                 if (!IsLegacyFabric1122Installed())
                 {
-                    SetLauncherProgress(82, "Minecraft 1.12.2 импортирована · устанавливаю Legacy Fabric…");
+                    SetLauncherProgress(86, "Minecraft 1.12.2 импортирована · устанавливаю Legacy Fabric…");
                     await InstallLegacyFabricDirectly();
                 }
 
-                SetLauncherProgress(100, "Готово · выбранная Minecraft 1.12.2 импортирована в Velvet");
+                SetLauncherProgress(100, "Готово · Minecraft 1.12.2 импортирована в Velvet");
                 launcherStatusText.Text = "Готово · теперь нажмите «Запустить»";
                 ShowToast("Minecraft 1.12.2 импортирована");
                 WriteLauncherLog("Ручной импорт Minecraft 1.12.2 завершён успешно.");
@@ -1296,10 +1364,13 @@ namespace VelvetVault
         private bool HasVelvetMinecraft1122Files()
         {
             string versionDir = Path.Combine(velvetGameDirectory, "versions", "1.12.2");
-            return File.Exists(Path.Combine(versionDir, "1.12.2.json"))
-                && File.Exists(Path.Combine(versionDir, "1.12.2.jar"))
-                && Directory.Exists(Path.Combine(velvetGameDirectory, "libraries"))
-                && Directory.Exists(Path.Combine(velvetGameDirectory, "assets"));
+            string assetsIndex = Path.Combine(velvetGameDirectory, "assets", "indexes");
+            string libraries = Path.Combine(velvetGameDirectory, "libraries");
+            return HasVersion1122Files(versionDir)
+                && Directory.Exists(libraries)
+                && Directory.EnumerateFiles(libraries, "*.jar", SearchOption.AllDirectories).Any()
+                && Directory.Exists(assetsIndex)
+                && Directory.EnumerateFiles(assetsIndex, "*.json", SearchOption.TopDirectoryOnly).Any();
         }
 
         private static string GetDownloadPath(Dictionary<string, object> library, string section, string key)
@@ -1359,25 +1430,33 @@ namespace VelvetVault
             }
         }
 
-        private void ImportMinecraft1122IntoVelvet(string sourceRoot)
+        private void ImportMinecraft1122IntoVelvet(string sourceVersionDir)
         {
-            if (string.IsNullOrWhiteSpace(sourceRoot)) throw new FileNotFoundException("Не найдены локальные файлы Minecraft 1.12.2 для импорта.");
+            if (!HasVersion1122Files(sourceVersionDir))
+                throw new FileNotFoundException("Не найдены 1.12.2.jar и 1.12.2.json для импорта.");
+
             EnsureVelvetGameFolders();
 
-            string sourceVersion = Path.Combine(sourceRoot, "versions", "1.12.2");
+            string preferredRoot = TryInferRootFromVersionDir(sourceVersionDir);
+            string librariesRoot = FindMinecraftDataRoot("libraries", preferredRoot);
+            string assetsRoot = FindMinecraftDataRoot("assets", preferredRoot);
+
+            if (librariesRoot == null) throw new DirectoryNotFoundException("Не найдена папка libraries для Minecraft 1.12.2.");
+            if (assetsRoot == null) throw new DirectoryNotFoundException("Не найдена папка assets для Minecraft 1.12.2.");
+
             string targetVersion = Path.Combine(velvetGameDirectory, "versions", "1.12.2");
             Directory.CreateDirectory(targetVersion);
-            CopyFileTo(Path.Combine(sourceVersion, "1.12.2.json"), Path.Combine(targetVersion, "1.12.2.json"));
-            CopyFileTo(Path.Combine(sourceVersion, "1.12.2.jar"), Path.Combine(targetVersion, "1.12.2.jar"));
+            CopyFileTo(Path.Combine(sourceVersionDir, "1.12.2.json"), Path.Combine(targetVersion, "1.12.2.json"));
+            CopyFileTo(Path.Combine(sourceVersionDir, "1.12.2.jar"), Path.Combine(targetVersion, "1.12.2.jar"));
 
             JavaScriptSerializer serializer = new JavaScriptSerializer();
-            Dictionary<string, object> vanilla = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(sourceVersion, "1.12.2.json")));
-            if (vanilla == null) throw new InvalidOperationException("Не удалось прочитать локальный профиль Minecraft 1.12.2.");
+            Dictionary<string, object> vanilla = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(sourceVersionDir, "1.12.2.json")));
+            if (vanilla == null) throw new InvalidOperationException("Не удалось прочитать профиль Minecraft 1.12.2.");
 
             if (vanilla.ContainsKey("libraries"))
             {
                 foreach (object raw in AsObjectArray(vanilla["libraries"]))
-                    CopyVanillaLibraryToVelvet(sourceRoot, AsDictionary(raw));
+                    CopyVanillaLibraryToVelvet(librariesRoot, AsDictionary(raw));
             }
 
             string assetId = "1.12";
@@ -1389,9 +1468,16 @@ namespace VelvetVault
                     assetId = Convert.ToString(assetIndex["id"], CultureInfo.InvariantCulture);
             }
 
-            string sourceIndex = Path.Combine(sourceRoot, "assets", "indexes", assetId + ".json");
+            string sourceIndex = Path.Combine(assetsRoot, "assets", "indexes", assetId + ".json");
+            if (!File.Exists(sourceIndex))
+                sourceIndex = Path.Combine(assetsRoot, "indexes", assetId + ".json");
+
             string targetIndex = Path.Combine(velvetGameDirectory, "assets", "indexes", assetId + ".json");
             CopyFileTo(sourceIndex, targetIndex);
+
+            string assetsObjectsRoot = Directory.Exists(Path.Combine(assetsRoot, "assets", "objects"))
+                ? Path.Combine(assetsRoot, "assets", "objects")
+                : Path.Combine(assetsRoot, "objects");
 
             if (File.Exists(sourceIndex))
             {
@@ -1409,14 +1495,16 @@ namespace VelvetVault
                             string hash = Convert.ToString(entry["hash"], CultureInfo.InvariantCulture);
                             if (string.IsNullOrWhiteSpace(hash) || hash.Length < 2) continue;
                             string relative = Path.Combine(hash.Substring(0, 2), hash);
-                            CopyFileTo(Path.Combine(sourceRoot, "assets", "objects", relative),
+                            CopyFileTo(Path.Combine(assetsObjectsRoot, relative),
                                        Path.Combine(velvetGameDirectory, "assets", "objects", relative));
                         }
                     }
                 }
             }
 
-            string sourceLogConfigs = Path.Combine(sourceRoot, "assets", "log_configs");
+            string sourceLogConfigs = Directory.Exists(Path.Combine(assetsRoot, "assets", "log_configs"))
+                ? Path.Combine(assetsRoot, "assets", "log_configs")
+                : Path.Combine(assetsRoot, "log_configs");
             if (Directory.Exists(sourceLogConfigs))
             {
                 foreach (string file in Directory.GetFiles(sourceLogConfigs))
@@ -1456,7 +1544,7 @@ namespace VelvetVault
                 SetLauncherProgress(100, "Готово · Velvet Minecraft полностью подготовлен");
             else if (!baseInstalled)
             {
-                string source = FindLocalMinecraft1122Root();
+                string source = FindVersion1122Directory();
                 SetLauncherProgress(fabricInstalled ? 80 : 0, source == null
                     ? (fabricInstalled ? "Legacy Fabric установлен · локальная Minecraft 1.12.2 для импорта пока не найдена" : "Папки Velvet созданы · нажмите «Подготовить 1.12.2 + Fabric»")
                     : "Найдена локальная Minecraft 1.12.2 · нажмите «Подготовить», Velvet скопирует её в свою папку");
@@ -1681,11 +1769,11 @@ namespace VelvetVault
                 if (!imported)
                 {
                     SetLauncherProgress(70, "Fabric установлен · ищу локальную Minecraft 1.12.2 для импорта…");
-                    string sourceRoot = FindLocalMinecraft1122Root();
-                    if (sourceRoot != null)
+                    string sourceVersionDir = FindVersion1122Directory();
+                    if (sourceVersionDir != null)
                     {
-                        WriteLauncherLog("Найдена локальная Minecraft 1.12.2: " + sourceRoot);
-                        await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceRoot); });
+                        WriteLauncherLog("Найдена локальная Minecraft 1.12.2: " + sourceVersionDir);
+                        await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceVersionDir); });
                         imported = HasVelvetMinecraft1122Files();
                     }
                 }
