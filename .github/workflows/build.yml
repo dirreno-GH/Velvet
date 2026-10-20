@@ -1,0 +1,67 @@
+name: Build VelvetVault 2.1
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'VelvetVault_2.1.cs'
+      - 'VelvetVault.csproj'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Create Velvet app icon
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("VelvetVault.ico", [Convert]::FromBase64String("AAABAAEAQEAAAAAAIABLBQAAFgAAAIlQTkcNChoKAAAADUlIRFIAAABAAAAAQAgGAAAAqmlx3gAABRJJREFUeJzl291uGkcUB/D/WUMcbIdgMGDHrqr4pqrkiyqp1KY15CF6W6lSr/smve8T9AXaByjgpO5X1LpVolbql5I45vvDJmAbDKcX7MAumcFQZiLMIlnysOzM/GYOZ2Z3bfr84ybADIL4ASB+56GyfZyYHe8BBLvMQ2X7d1EXnGXYZR4qK9se1c6gX7K2wUNlx3HLy3hihm8KPM8gnibBEyAGYGw8z/jMswNPl+EBhm9MPF/BsBeDQSp8LwfMJ94586zCExjWnONFmVVGywN4URcPG8EMyyN4UQ878e4cMP94URc79z7WEH7MTl1ZPIY3ftYQftbXeV14Fsctr858fx/gZTyxKwnO5N7eJJ7dOcBb+P65lpfxdhL0Lp4gcoBH8b0c4GE88XAO8BjenQM8iCdA7AO8iSfYt8Smxb/32TreTAYhe/35VQlPvsxOjA/EryHxxTvSOrvtLr779EdcvGxPhSc4rwanmPmnmWNpRwFga/cmiCaf+VuJNWWd5UcVLfh+Dpg27IuPGzgtt6WdDUT8WHt7eeKwX09ElAOQT+W14PvL4DR48T189lAdBW8kQhPhg9tLWN4KSOtqn7RR/bmiBW9fDOlJeM/TNeUAbNwLwfJhLDyBsTEi/AsPCkCnqwXvzgFT4IkZ9cNz1P45lXbav7yA+J3gWHgLjPiuOvwL6bw2vGsApsGL8vNMVdnxzUT4UjwxY3XnJhbD16R1NA+baPxV14YHIDZCetb5Fw9r4A5LOx97NwhfwBqJJwDryRHhn8prxfciThOewGidXKBwUJd23vJb2Hh/dSTe8hOi9xThz0BxL6cV3/sKaN7hHaYryhm8lQwr8QBj7W4IvqUF6bm1x1W0Smda8fbFkD48gZF/VEO70ZEiVneCWAz7pXgCI56MKgevmMppxwPOHKABDzC4zcjuy5MhEbCxG5G2419aQOTuqvS87nkHlf2CdvwgB2jCi+NHmbJyJjeSEemFTfSDCCy/JT2n/H0R3bOOdnwvB2jGExjV3+to5s6lmBu3l7GyFXDhCUA8oQ7/UipnBD8YAAOXtNk9dRTE76+58NdW/QjthKSfbVVbOP61YgQPSB+PT48nMI7SReUArCei/StEMPdmn+SfLWdyAHeN4O1VQD+ewDjNn6H2h3xPcD22iNBbQYibGbFkTDlYxdSRMbydBPXjxfHsiCiIJaMgMJY3A1jZXpF+pvFvHadP68bwjiSoH09gFL4to9vuSnHRD9dgLQCx++rZL6ezRvEEXPZk6P/jiRmdxgVKP8n3BP4bfoTvhBFVhD93GeW9rFE8MPLJ0HR40UAuXVDO8O1PtnE9Lr/xcXJQxkXl3Ch+kAMM4QmM6i8VtE8Ut8s2l5SDU/rmyDi+9xUwiCcw0GEUHqiToezVaV6g9kPBOL6/DJrCi3U+n8pNNADV/Ty41TGOd+cAQ3gCo/F3Hc1njbEHoNxf+83iBznAIF6UC5n8WPhW4RQvn5RfC95eBs3jAUYxkwPsDo+c/cyRe+kziCc4/krMJJ7AaJfOcPybfE/gfFVTL14bHmDQ1x8dOHFsAm/iTo4GPPVviZmc+RnF9/v1yuNxL+EHOWCAH+vfTOYAT+I8y4H31MyL9ywJnuYcT862LcXMkxfwrmsBSdjTvOPdOUAe9jTP+EEOkONFgzSveALgGzPhiUjgK4QnVdvOvvnGwDvL5MDzDOJJttSp8PYAjI0fnnmaMbx0nR+FJwD/AbMd28gUZQk3AAAAAElFTkSuQmCC"))
+
+      - name: Restore
+        run: msbuild VelvetVault.csproj /t:Restore /p:Configuration=Release /p:Platform="Any CPU"
+
+      - name: Build Windows EXE
+        run: msbuild VelvetVault.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:RestorePackages=false
+
+      - name: Prepare artifact
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path bin -Filter "VelvetVault-2.1.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "VelvetVault-2.1.exe was not produced." }
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item $exe.FullName "artifact\VelvetVault-2.1.exe"
+
+      - name: Copy release files to repository root
+        shell: pwsh
+        run: |
+          Copy-Item "artifact\VelvetVault-2.1.exe" "VelvetVault-2.1.exe" -Force
+
+      - name: Commit built EXE and icon
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VelvetVault-2.1.exe VelvetVault.ico
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "Build VelvetVault 2.1"
+            git push
+          }
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VelvetVault-2.1
+          path: artifact/VelvetVault-2.1.exe
+          if-no-files-found: error
