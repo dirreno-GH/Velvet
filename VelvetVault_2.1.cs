@@ -24,6 +24,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using Ellipse = System.Windows.Shapes.Ellipse;
 
 [assembly: AssemblyTitle("Velvet Vault")]
@@ -421,6 +422,7 @@ namespace VelvetVault
         private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
         private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
         private readonly string velvetGameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft");
+        private readonly string velvetMinecraftSourcePathFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher", "minecraft-source.txt");
         private const string LegacyFabricMetaUrl = "https://meta.legacyfabric.net/";
         private const string LegacyFabricMavenUrl = "https://repo.legacyfabric.net/legacyfabric/";
         private Grid lessonsView;
@@ -737,7 +739,11 @@ namespace VelvetVault
                 <Button x:Name='LauncherLaunchButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▶  Запустить'/>
               </Grid>
 
-              <Button x:Name='OpenModsFolderButton' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet Minecraft' Margin='0,0,0,18'/>
+              <Grid Margin='0,0,0,18'>
+                <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
+                <Button x:Name='ChooseMinecraftSourceButton' Style='{StaticResource GhostButton}' Content='⌕  Выбрать установленную 1.12.2'/>
+                <Button x:Name='OpenModsFolderButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet Minecraft'/>
+              </Grid>
 
               <Grid Margin='0,0,0,8'>
                 <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='58'/></Grid.ColumnDefinitions>
@@ -749,7 +755,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Нажмите «Запустить»: если папка Velvet ещё не готова, программа сама подготовит 1.12.2 + Legacy Fabric и после завершения автоматически запустит игру. Вся игра хранится в отдельной папке Velvet.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Если Velvet не нашёл установленную 1.12.2 автоматически, нажмите «Выбрать установленную 1.12.2» и укажите файл 1.12.2.jar. Velvet импортирует игру в свою отдельную папку и дальше будет запускать её оттуда.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -941,6 +947,7 @@ namespace VelvetVault
             Find<Button>("LauncherAppButton").Click += delegate { RefreshLauncherStatus(); ShowModule(launcherView, "LauncherAppButton"); };
             Find<Button>("LauncherDownloadButton").Click += delegate { DownloadVelvetMinecraft(); };
             Find<Button>("LauncherLaunchButton").Click += delegate { LaunchVelvetMinecraft(); };
+            Find<Button>("ChooseMinecraftSourceButton").Click += delegate { ChooseMinecraft1122Source(); };
             Find<Button>("OpenModsFolderButton").Click += delegate { OpenLauncherModsFolder(); };
             Find<Button>("AddLessonButton").Click += delegate { AddScheduleItem(true); };
             Find<Button>("DeleteLessonButton").Click += delegate { DeleteScheduleItem(true); };
@@ -1148,6 +1155,16 @@ namespace VelvetVault
 
         private string FindLocalMinecraft1122Root()
         {
+            try
+            {
+                if (File.Exists(velvetMinecraftSourcePathFile))
+                {
+                    string saved = File.ReadAllText(velvetMinecraftSourcePathFile).Trim();
+                    if (IsMinecraft1122Root(saved)) return saved;
+                }
+            }
+            catch { }
+
             List<string> roots = new List<string>();
             Action<string> add = delegate(string path)
             {
@@ -1213,6 +1230,67 @@ namespace VelvetVault
                 if (IsMinecraft1122Root(root)) return root;
 
             return null;
+        }
+
+        private async void ChooseMinecraft1122Source()
+        {
+            try
+            {
+                OpenFileDialog dialog = new OpenFileDialog
+                {
+                    Title = "Выберите файл Minecraft 1.12.2.jar",
+                    Filter = "Minecraft 1.12.2 (1.12.2.jar)|1.12.2.jar|JAR-файлы (*.jar)|*.jar",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+
+                if (dialog.ShowDialog(this) != true) return;
+
+                string versionDir = Path.GetDirectoryName(dialog.FileName);
+                DirectoryInfo versionsDir = string.IsNullOrWhiteSpace(versionDir) ? null : Directory.GetParent(versionDir);
+                DirectoryInfo rootDir = versionsDir == null ? null : versionsDir.Parent;
+                string sourceRoot = rootDir == null ? null : rootDir.FullName;
+
+                if (!IsMinecraft1122Root(sourceRoot))
+                {
+                    launcherStatusText.Text = "Выбранный файл не относится к полной установленной Minecraft 1.12.2";
+                    ShowToast("Нужна папка с versions, libraries и assets");
+                    return;
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(velvetMinecraftSourcePathFile));
+                File.WriteAllText(velvetMinecraftSourcePathFile, sourceRoot, Encoding.UTF8);
+
+                launcherDownloadBusy = true;
+                launcherDownloadButton.IsEnabled = false;
+                SetLauncherProgress(72, "Импортирую выбранную Minecraft 1.12.2 в папку Velvet…");
+                WriteLauncherLog("Пользователь выбрал источник Minecraft 1.12.2: " + sourceRoot);
+
+                await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceRoot); });
+
+                if (!IsLegacyFabric1122Installed())
+                {
+                    SetLauncherProgress(82, "Minecraft 1.12.2 импортирована · устанавливаю Legacy Fabric…");
+                    await InstallLegacyFabricDirectly();
+                }
+
+                SetLauncherProgress(100, "Готово · выбранная Minecraft 1.12.2 импортирована в Velvet");
+                launcherStatusText.Text = "Готово · теперь нажмите «Запустить»";
+                ShowToast("Minecraft 1.12.2 импортирована");
+                WriteLauncherLog("Ручной импорт Minecraft 1.12.2 завершён успешно.");
+            }
+            catch (Exception ex)
+            {
+                WriteLauncherLog("Ошибка ручного импорта: " + ex);
+                launcherStatusText.Text = "Ошибка импорта: " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось импортировать 1.12.2");
+            }
+            finally
+            {
+                launcherDownloadBusy = false;
+                launcherDownloadButton.IsEnabled = true;
+                launcherLaunchButton.IsEnabled = true;
+            }
         }
 
         private bool HasVelvetMinecraft1122Files()
