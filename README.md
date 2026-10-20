@@ -25,6 +25,22 @@
 
 **[VelvetVault-2.1.exe](VelvetVault-2.1.exe)**
 
+## Проверка скачанного файла
+
+Для каждой автоматической сборки GitHub создаёт `SHA256SUMS.txt` и build-provenance attestation. Это позволяет проверить, что EXE действительно получен из исходников этого репозитория.
+
+Проверка SHA-256 в PowerShell:
+
+```powershell
+Get-FileHash .\VelvetVault-2.1.exe -Algorithm SHA256
+```
+
+Сравните результат со значением в `SHA256SUMS.txt`.
+
+## Code signing policy
+
+См. [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md). Проект подготовлен для подачи в SignPath Foundation на бесплатную доверенную подпись open-source сборок.
+
 ## Системные требования
 
 - Windows 10 или Windows 11
@@ -55,3 +71,8 @@
 **Velvet Corp.**
 
 Текущая EXE-сборка содержит метаданные Velvet Corp. Для отображения проверенного издателя в предупреждениях Windows и снижения количества предупреждений SmartScreen требуется Authenticode-подпись действительным сертификатом подписи кода.
+
+
+## Лицензия
+
+Исходный код распространяется по [MIT License](LICENSE).

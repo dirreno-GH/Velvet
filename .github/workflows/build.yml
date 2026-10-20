@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -48,18 +50,26 @@ jobs:
           if (-not $exe) { throw "VelvetVault-2.1.exe was not produced." }
           New-Item -ItemType Directory -Force -Path artifact | Out-Null
           Copy-Item $exe.FullName "artifact\VelvetVault-2.1.exe"
+          $hash = (Get-FileHash "artifact\VelvetVault-2.1.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  VelvetVault-2.1.exe" | Set-Content -Encoding ascii "artifact\SHA256SUMS.txt"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifact/VelvetVault-2.1.exe
 
       - name: Copy release files to repository root
         shell: pwsh
         run: |
           Copy-Item "artifact\VelvetVault-2.1.exe" "VelvetVault-2.1.exe" -Force
+          Copy-Item "artifact\SHA256SUMS.txt" "SHA256SUMS.txt" -Force
 
       - name: Commit built EXE and icon
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VelvetVault-2.1.exe VelvetVault.ico VelvetVault-logo.png
+          git add VelvetVault-2.1.exe VelvetVault.ico VelvetVault-logo.png SHA256SUMS.txt
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
             git commit -m "Build VelvetVault 2.1"
@@ -71,5 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VelvetVault-2.1
-          path: artifact/VelvetVault-2.1.exe
+          path: |
+            artifact/VelvetVault-2.1.exe
+            artifact/SHA256SUMS.txt
           if-no-files-found: error
