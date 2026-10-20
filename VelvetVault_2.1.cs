@@ -23,11 +23,11 @@ using System.Windows.Threading;
 using Ellipse = System.Windows.Shapes.Ellipse;
 
 [assembly: AssemblyTitle("Velvet Vault")]
-[assembly: AssemblyDescription("Local encrypted password manager")]
-[assembly: AssemblyCompany("Velvet Vault")]
-[assembly: AssemblyProduct("Velvet Vault")]
+[assembly: AssemblyDescription("Velvet desktop productivity and security hub")]
+[assembly: AssemblyCompany("Velvet Corp.")]
+[assembly: AssemblyProduct("Velvet")]
 [assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+[assembly: AssemblyFileVersion("2.1.1.0")]
 
 namespace VelvetVault
 {
@@ -528,6 +528,30 @@ namespace VelvetVault
     <Style x:Key='IconButton' TargetType='Button'><Setter Property='Background' Value='Transparent'/><Setter Property='Foreground' Value='{DynamicResource Muted}'/><Setter Property='BorderThickness' Value='0'/><Setter Property='Padding' Value='10,6'/><Setter Property='FontSize' Value='16'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'><Border x:Name='b' Background='{TemplateBinding Background}' CornerRadius='9' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='b' Property='Background' Value='{DynamicResource IconHoverBrush}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     <Style TargetType='CheckBox'><Setter Property='Foreground' Value='{DynamicResource Ink}'/><Setter Property='FontSize' Value='13'/><Setter Property='Margin' Value='0,5'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='CheckBox'><Grid><Grid.ColumnDefinitions><ColumnDefinition Width='18'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions><Border x:Name='Box' Width='16' Height='16' CornerRadius='5' Background='{DynamicResource FieldBrush}' BorderBrush='{DynamicResource FieldBorderBrush}' BorderThickness='1' VerticalAlignment='Center'><TextBlock x:Name='Tick' Text='✓' Foreground='White' FontSize='11' FontWeight='Bold' HorizontalAlignment='Center' VerticalAlignment='Center' Visibility='Collapsed'/></Border><ContentPresenter Grid.Column='1' Margin='7,0,0,0' VerticalAlignment='Center'/></Grid><ControlTemplate.Triggers><Trigger Property='IsChecked' Value='True'><Setter TargetName='Box' Property='Background' Value='{DynamicResource AccentBrush}'/><Setter TargetName='Box' Property='BorderBrush' Value='Transparent'/><Setter TargetName='Tick' Property='Visibility' Value='Visible'/></Trigger><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Box' Property='BorderBrush' Value='{DynamicResource GhostTextBrush}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     <Style TargetType='ComboBoxItem'><Setter Property='Foreground' Value='{DynamicResource Ink}'/><Setter Property='Padding' Value='10,8'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ComboBoxItem'><Border x:Name='ItemBorder' Background='Transparent' CornerRadius='8' Padding='{TemplateBinding Padding}'><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='ItemBorder' Property='Background' Value='{DynamicResource HoverBrush}'/></Trigger><Trigger Property='IsSelected' Value='True'><Setter TargetName='ItemBorder' Property='Background' Value='{DynamicResource SelectedBrush}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+    <Style x:Key='VelvetScheduleItem' TargetType='ListBoxItem'>
+      <Setter Property='Foreground' Value='{DynamicResource Ink}'/>
+      <Setter Property='Background' Value='Transparent'/>
+      <Setter Property='BorderThickness' Value='0'/>
+      <Setter Property='Padding' Value='14,12'/>
+      <Setter Property='Margin' Value='0,0,0,8'/>
+      <Setter Property='HorizontalContentAlignment' Value='Stretch'/>
+      <Setter Property='FocusVisualStyle' Value='{x:Null}'/>
+      <Setter Property='Cursor' Value='Hand'/>
+      <Setter Property='Template'>
+        <Setter.Value>
+          <ControlTemplate TargetType='ListBoxItem'>
+            <Border x:Name='ScheduleCard' Background='{TemplateBinding Background}' CornerRadius='12' BorderBrush='Transparent' BorderThickness='0' Padding='{TemplateBinding Padding}'>
+              <ContentPresenter VerticalAlignment='Center'/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='ScheduleCard' Property='Background' Value='{DynamicResource HoverBrush}'/></Trigger>
+              <Trigger Property='IsSelected' Value='True'><Setter TargetName='ScheduleCard' Property='Background' Value='{DynamicResource SelectedBrush}'/></Trigger>
+              <Trigger Property='IsEnabled' Value='False'><Setter TargetName='ScheduleCard' Property='Opacity' Value='.55'/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key='ModernComboBox' TargetType='ComboBox'><Setter Property='Background' Value='{DynamicResource FieldBrush}'/><Setter Property='Foreground' Value='{DynamicResource Ink}'/><Setter Property='BorderBrush' Value='{DynamicResource FieldBorderBrush}'/><Setter Property='BorderThickness' Value='1'/><Setter Property='Padding' Value='11,8'/><Setter Property='FontSize' Value='12'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ComboBox'><Grid><ToggleButton x:Name='DropDownToggle' Focusable='False' IsChecked='{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}' Content='{TemplateBinding SelectionBoxItem}' ContentTemplate='{TemplateBinding SelectionBoxItemTemplate}' Foreground='{TemplateBinding Foreground}' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' Padding='{TemplateBinding Padding}'><ToggleButton.Template><ControlTemplate TargetType='ToggleButton'><Border x:Name='ComboBorder' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='10' Padding='{TemplateBinding Padding}'><Grid><ContentPresenter ContentTemplate='{TemplateBinding ContentTemplate}' VerticalAlignment='Center' Margin='0,0,24,0'/><TextBlock Text='⌄' Foreground='{DynamicResource Muted}' FontSize='16' HorizontalAlignment='Right' VerticalAlignment='Center' Margin='0,-4,0,0'/></Grid></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='ComboBorder' Property='BorderBrush' Value='{DynamicResource GhostTextBrush}'/></Trigger><Trigger Property='IsChecked' Value='True'><Setter TargetName='ComboBorder' Property='BorderBrush' Value='{DynamicResource GhostTextBrush}'/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><Popup x:Name='PART_Popup' IsOpen='{TemplateBinding IsDropDownOpen}' Placement='Bottom' AllowsTransparency='True' Focusable='False' PopupAnimation='Fade'><Border Background='{DynamicResource SurfaceBrush}' BorderBrush='{DynamicResource Line}' BorderThickness='1' CornerRadius='12' Padding='5' Margin='0,5,0,0' MinWidth='{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}'><ScrollViewer MaxHeight='260' VerticalScrollBarVisibility='Auto'><ItemsPresenter/></ScrollViewer></Border></Popup></Grid><ControlTemplate.Triggers><Trigger Property='IsEnabled' Value='False'><Setter TargetName='DropDownToggle' Property='Opacity' Value='.55'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     <Style TargetType='Slider'><Setter Property='Height' Value='28'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Slider'><Grid Margin='2,0'><Track x:Name='PART_Track' Orientation='Horizontal' IsDirectionReversed='False' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' Value='{TemplateBinding Value}'><Track.DecreaseRepeatButton><RepeatButton Command='{x:Static Slider.DecreaseLarge}' Focusable='False'><RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Background='{DynamicResource AccentBrush}' CornerRadius='4' Height='7' VerticalAlignment='Center'/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton><Track.Thumb><Thumb Width='27' Height='20' Focusable='False'><Thumb.Template><ControlTemplate TargetType='Thumb'><Grid><Border x:Name='SliderThumbGlow' Background='{DynamicResource AccentBrush}' Opacity='.24' CornerRadius='10' Margin='-3'/><Border x:Name='SliderThumb' Background='{DynamicResource AccentBrush}' BorderBrush='{DynamicResource SurfaceBrush}' BorderThickness='2' CornerRadius='8'><StackPanel Orientation='Horizontal' HorizontalAlignment='Center' VerticalAlignment='Center'><Border Width='2' Height='7' CornerRadius='1' Background='White' Opacity='.82' Margin='0,0,3,0'/><Border Width='2' Height='7' CornerRadius='1' Background='White' Opacity='.82'/></StackPanel></Border></Grid><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='SliderThumbGlow' Property='Opacity' Value='.48'/></Trigger><Trigger Property='IsDragging' Value='True'><Setter TargetName='SliderThumb' Property='BorderThickness' Value='3'/><Setter TargetName='SliderThumbGlow' Property='Opacity' Value='.60'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command='{x:Static Slider.IncreaseLarge}' Focusable='False'><RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Background='{DynamicResource FieldBorderBrush}' CornerRadius='4' Height='7' VerticalAlignment='Center'/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>
     <Style TargetType='ScrollBar'>
@@ -658,7 +682,7 @@ namespace VelvetVault
               <Button x:Name='AddLessonButton' Grid.Column='8' Style='{StaticResource ActionButton}' Content='+ Добавить' VerticalAlignment='Bottom'/>
             </Grid>
           </Border>
-          <Border Grid.Row='3' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='LessonsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
+          <Border Grid.Row='3' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='LessonsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15' ItemContainerStyle='{StaticResource VelvetScheduleItem}' FocusVisualStyle='{x:Null}'/></Border>
           <Button x:Name='DeleteLessonButton' Grid.Row='4' Style='{StaticResource DangerButton}' Content='Удалить выбранный урок' HorizontalAlignment='Right' Margin='0,16,0,0'/>
         </Grid>
 
@@ -680,7 +704,7 @@ namespace VelvetVault
               <Button x:Name='AddPairButton' Grid.Column='8' Style='{StaticResource ActionButton}' Content='+ Добавить' VerticalAlignment='Bottom'/>
             </Grid>
           </Border>
-          <Border Grid.Row='3' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='PairsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
+          <Border Grid.Row='3' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='PairsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15' ItemContainerStyle='{StaticResource VelvetScheduleItem}' FocusVisualStyle='{x:Null}'/></Border>
           <Button x:Name='DeletePairButton' Grid.Row='4' Style='{StaticResource DangerButton}' Content='Удалить выбранную пару' HorizontalAlignment='Right' Margin='0,16,0,0'/>
         </Grid>
 
