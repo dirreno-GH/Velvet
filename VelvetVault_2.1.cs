@@ -755,7 +755,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Если Velvet не нашёл установленную 1.12.2 автоматически, нажмите «Выбрать установленную 1.12.2» и укажите файл 1.12.2.jar. Velvet импортирует игру в свою отдельную папку и дальше будет запускать её оттуда.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Страница открывается без сканирования диска. Нажмите «Запустить» — поиск 1.12.2 и Java пойдёт в фоне. Если версия не найдётся, можно вручную выбрать 1.12.2.jar.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -1366,11 +1366,13 @@ namespace VelvetVault
             string versionDir = Path.Combine(velvetGameDirectory, "versions", "1.12.2");
             string assetsIndex = Path.Combine(velvetGameDirectory, "assets", "indexes");
             string libraries = Path.Combine(velvetGameDirectory, "libraries");
-            return HasVersion1122Files(versionDir)
-                && Directory.Exists(libraries)
-                && Directory.EnumerateFiles(libraries, "*.jar", SearchOption.AllDirectories).Any()
-                && Directory.Exists(assetsIndex)
-                && Directory.EnumerateFiles(assetsIndex, "*.json", SearchOption.TopDirectoryOnly).Any();
+
+            bool hasLibraries = false;
+            bool hasAssetIndex = false;
+            try { hasLibraries = Directory.Exists(libraries) && Directory.EnumerateFileSystemEntries(libraries).Any(); } catch { }
+            try { hasAssetIndex = Directory.Exists(assetsIndex) && Directory.EnumerateFiles(assetsIndex, "*.json", SearchOption.TopDirectoryOnly).Any(); } catch { }
+
+            return HasVersion1122Files(versionDir) && hasLibraries && hasAssetIndex;
         }
 
         private static string GetDownloadPath(Dictionary<string, object> library, string section, string key)
@@ -1528,31 +1530,28 @@ namespace VelvetVault
         private void RefreshLauncherStatus()
         {
             if (launcherStatusText == null) return;
+
+            // This method runs when the page is opened, so it must stay instant.
+            // Never recursively scan AppData or Java installations here.
             EnsureVelvetGameFolders();
             launcherModsPathText.Text = velvetGameDirectory;
 
             bool fabricInstalled = IsLegacyFabric1122Installed();
             bool baseInstalled = HasVelvetMinecraft1122Files();
-            bool javaFound = !string.IsNullOrWhiteSpace(FindJavaExecutable());
-            bool ready = fabricInstalled && baseInstalled && javaFound;
+            bool ready = fabricInstalled && baseInstalled;
 
             launcherLaunchButton.IsEnabled = true;
             launcherDownloadButton.IsEnabled = !launcherDownloadBusy;
             launcherDownloadButton.Content = ready ? "↻  Переустановить Fabric" : "↓  Подготовить 1.12.2 + Fabric";
 
             if (ready)
-                SetLauncherProgress(100, "Готово · Velvet Minecraft полностью подготовлен");
-            else if (!baseInstalled)
-            {
-                string source = FindVersion1122Directory();
-                SetLauncherProgress(fabricInstalled ? 80 : 0, source == null
-                    ? (fabricInstalled ? "Legacy Fabric установлен · локальная Minecraft 1.12.2 для импорта пока не найдена" : "Папки Velvet созданы · нажмите «Подготовить 1.12.2 + Fabric»")
-                    : "Найдена локальная Minecraft 1.12.2 · нажмите «Подготовить», Velvet скопирует её в свою папку");
-            }
-            else if (!javaFound)
-                SetLauncherProgress(fabricInstalled ? 100 : 70, "Файлы игры готовы · не найдена Java");
+                SetLauncherProgress(100, "Файлы Velvet Minecraft готовы · Java проверится при запуске");
+            else if (fabricInstalled)
+                SetLauncherProgress(80, "Legacy Fabric установлен · нажмите «Запустить», поиск 1.12.2 пойдёт в фоне");
+            else if (baseInstalled)
+                SetLauncherProgress(60, "Minecraft 1.12.2 импортирована · осталось подготовить Legacy Fabric");
             else
-                SetLauncherProgress(60, "База 1.12.2 в папке Velvet готова · осталось установить Fabric");
+                SetLauncherProgress(0, "Нажмите «Запустить» · подготовка и поиск 1.12.2 выполнятся в фоне");
         }
 
         private static Dictionary<string, object> AsDictionary(object value)
@@ -1769,7 +1768,7 @@ namespace VelvetVault
                 if (!imported)
                 {
                     SetLauncherProgress(70, "Fabric установлен · ищу локальную Minecraft 1.12.2 для импорта…");
-                    string sourceVersionDir = FindVersion1122Directory();
+                    string sourceVersionDir = await Task.Run(delegate { return FindVersion1122Directory(); });
                     if (sourceVersionDir != null)
                     {
                         WriteLauncherLog("Найдена локальная Minecraft 1.12.2: " + sourceVersionDir);
@@ -2084,7 +2083,7 @@ namespace VelvetVault
             return arguments;
         }
 
-        private void LaunchVelvetMinecraft()
+        private async void LaunchVelvetMinecraft()
         {
             string nickname = launcherNicknameInput == null ? "Player" : launcherNicknameInput.Text.Trim();
             if (!IsValidOfflineNickname(nickname))
@@ -2106,7 +2105,8 @@ namespace VelvetVault
                 return;
             }
 
-            string java = FindJavaExecutable();
+            launcherStatusText.Text = "Проверяю Java…";
+            string java = await Task.Run(delegate { return FindJavaExecutable(); });
             if (string.IsNullOrWhiteSpace(java))
             {
                 launcherStatusText.Text = "Java не найдена. Для Minecraft 1.12.2 рекомендуется Java 8.";
@@ -2135,7 +2135,8 @@ namespace VelvetVault
 
                 string mainClass = ReadString(fabric, "mainClass", ReadString(vanilla, "mainClass", null));
                 if (string.IsNullOrWhiteSpace(mainClass)) throw new InvalidOperationException("Не найден mainClass для Fabric.");
-                string nativesDir = PrepareNatives(nativeJars);
+                launcherStatusText.Text = "Подготавливаю библиотеки запуска…";
+                string nativesDir = await Task.Run(delegate { return PrepareNatives(nativeJars); });
                 string cp = string.Join(Path.PathSeparator.ToString(), classPath);
                 string gameArgs = BuildOfflineGameArguments(vanilla, fabric, nickname, versionId);
 
