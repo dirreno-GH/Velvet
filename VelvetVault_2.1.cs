@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -404,6 +406,13 @@ namespace VelvetVault
         private TextBlock gameBackpackText;
         private TextBlock gameStatusText;
         private Grid notesView;
+        private Grid launcherView;
+        private Button launcherLaunchButton;
+        private TextBlock launcherStatusText;
+        private TextBlock launcherModsPathText;
+        private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
+        private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
+        private const string LegacyFabricInstallerUrl = "https://maven.legacyfabric.net/net/legacyfabric/fabric-installer/0.11.1/fabric-installer-0.11.1.exe";
         private Grid lessonsView;
         private Grid pairsView;
         private Grid timerView;
@@ -613,6 +622,7 @@ namespace VelvetVault
               <Button x:Name='FinanceAppButton' Style='{StaticResource AppNavButton}' Content='₴   Финансы'/>
               <Button x:Name='FilesAppButton' Style='{StaticResource AppNavButton}' Content='⇄   Конвертер файлов'/>
               <Button x:Name='DocumentsAppButton' Style='{StaticResource AppNavButton}' Content='▧   Документы'/>
+              <Button x:Name='LauncherAppButton' Style='{StaticResource AppNavButton}' Content='◇   Velvet launcher'/>
             </StackPanel>
             <ScrollViewer Grid.Row='2' VerticalScrollBarVisibility='Auto' Margin='0,16,0,12'><StackPanel>
               <TextBlock Text='ТЕМА' Foreground='#696C83' FontSize='10' FontWeight='Bold' Margin='2,0,0,8'/>
@@ -664,6 +674,50 @@ namespace VelvetVault
             </Border>
           </Grid>
         </Grid>
+
+        <Grid x:Name='LauncherView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,30,28'>
+          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='*'/></Grid.RowDefinitions>
+          <StackPanel Margin='0,0,0,20'>
+            <TextBlock Text='Velvet launcher' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/>
+            <TextBlock Text='Minecraft 1.12.2 · только Legacy Fabric' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/>
+          </StackPanel>
+          <Border Grid.Row='1' Width='620' Background='{DynamicResource SurfaceBrush}' CornerRadius='24' Padding='30' HorizontalAlignment='Center' VerticalAlignment='Center'>
+            <StackPanel>
+              <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='18' Padding='20' Margin='0,0,0,20'>
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text='Minecraft Java Edition' Foreground='{DynamicResource Ink}' FontSize='20' FontWeight='Bold'/>
+                    <TextBlock Text='Версия 1.12.2' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/>
+                    <TextBlock Text='Модлоадер: Legacy Fabric' Foreground='{DynamicResource GhostTextBrush}' FontSize='13' FontWeight='SemiBold' Margin='0,4,0,0'/>
+                  </StackPanel>
+                  <Border Grid.Column='1' Background='{DynamicResource GhostBrush}' CornerRadius='12' Padding='14,8' VerticalAlignment='Center'>
+                    <TextBlock Text='FABRIC ONLY' Foreground='{DynamicResource GhostTextBrush}' FontSize='11' FontWeight='Bold'/>
+                  </Border>
+                </Grid>
+              </Border>
+
+              <TextBlock Style='{StaticResource Label}' Text='ПАПКА МОДОВ'/>
+              <Border Background='{DynamicResource FieldBrush}' BorderBrush='{DynamicResource FieldBorderBrush}' BorderThickness='1' CornerRadius='12' Padding='14,12' Margin='0,0,0,18'>
+                <TextBlock x:Name='LauncherModsPathText' Foreground='{DynamicResource Ink}' FontSize='12' TextWrapping='Wrap'/>
+              </Border>
+
+              <Grid Margin='0,0,0,18'>
+                <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
+                <Button x:Name='LauncherLaunchButton' Style='{StaticResource ActionButton}' Content='▶  Запустить'/>
+                <Button x:Name='OpenModsFolderButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▣  Папка игры / mods'/>
+              </Grid>
+
+              <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
+                <StackPanel>
+                  <TextBlock x:Name='LauncherStatusText' Text='Готов к запуску' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
+                  <TextBlock Text='При первом запуске Velvet подготовит профиль Legacy Fabric 1.12.2 через официальный установщик Legacy Fabric. Для входа используется официальный Minecraft Launcher и ваш Microsoft-аккаунт.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+        </Grid>
+
         <Grid x:Name='LessonsView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
           <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
           <Grid Margin='0,0,0,18'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='220'/></Grid.ColumnDefinitions>
@@ -815,6 +869,8 @@ namespace VelvetVault
             dialogOverlay = Find<Grid>("DialogOverlay"); dialogCard = Find<Border>("DialogCard"); dialogTitle = Find<TextBlock>("DialogTitle"); dialogMessage = Find<TextBlock>("DialogMessage"); dialogCancelButton = Find<Button>("DialogCancelButton"); dialogConfirmButton = Find<Button>("DialogConfirmButton");
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
+            launcherView = Find<Grid>("LauncherView"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText");
+            launcherModsPathText.Text = Path.Combine(minecraftDirectory, "mods");
             lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput"); lessonDaySelector = Find<ComboBox>("LessonDaySelector");
             pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput"); pairDaySelector = Find<ComboBox>("PairDaySelector");
             timerView = Find<Grid>("TimerView"); timerDisplay = Find<TextBlock>("TimerDisplay"); timerStatus = Find<TextBlock>("TimerStatus"); timerMinutesInput = Find<TextBox>("TimerMinutesInput"); timerSecondsInput = Find<TextBox>("TimerSecondsInput"); timerMessageInput = Find<TextBox>("TimerMessageInput");
@@ -844,6 +900,9 @@ namespace VelvetVault
             Find<Button>("FinanceAppButton").Click += delegate { ShowModule(financeView, "FinanceAppButton"); };
             Find<Button>("FilesAppButton").Click += delegate { ShowModule(converterView, "FilesAppButton"); };
             Find<Button>("DocumentsAppButton").Click += delegate { ShowModule(documentsView, "DocumentsAppButton"); };
+            Find<Button>("LauncherAppButton").Click += delegate { RefreshLauncherStatus(); ShowModule(launcherView, "LauncherAppButton"); };
+            Find<Button>("LauncherLaunchButton").Click += delegate { LaunchVelvetMinecraft(); };
+            Find<Button>("OpenModsFolderButton").Click += delegate { OpenLauncherModsFolder(); };
             Find<Button>("AddLessonButton").Click += delegate { AddScheduleItem(true); };
             Find<Button>("DeleteLessonButton").Click += delegate { DeleteScheduleItem(true); };
             Find<Button>("AddPairButton").Click += delegate { AddScheduleItem(false); };
@@ -931,12 +990,176 @@ namespace VelvetVault
 
         private void ShowModule(FrameworkElement module, string activeButtonName)
         {
-            FrameworkElement[] modules = new FrameworkElement[] { workspacePanel, lessonsView, pairsView, timerView, calculatorView, notesView, tasksView, financeView, converterView, documentsView };
+            FrameworkElement[] modules = new FrameworkElement[] { workspacePanel, launcherView, lessonsView, pairsView, timerView, calculatorView, notesView, tasksView, financeView, converterView, documentsView };
             foreach (FrameworkElement item in modules) if (item != null) item.Visibility = item == module ? Visibility.Visible : Visibility.Collapsed;
-            string[] buttons = new string[] { "VaultAppButton", "LessonsAppButton", "PairsAppButton", "TimerAppButton", "TasksAppButton", "CalculatorAppButton", "NotesAppButton", "FinanceAppButton", "FilesAppButton", "DocumentsAppButton" };
+            string[] buttons = new string[] { "VaultAppButton", "LessonsAppButton", "PairsAppButton", "TimerAppButton", "TasksAppButton", "CalculatorAppButton", "NotesAppButton", "FinanceAppButton", "FilesAppButton", "DocumentsAppButton", "LauncherAppButton" };
             foreach (string name in buttons) Find<Button>(name).Style = (Style)Resources[name == activeButtonName ? "AppNavActive" : "AppNavButton"];
             if (module != null) Fade(module);
             lastActivity = DateTime.Now;
+        }
+
+        private bool IsLegacyFabric1122Installed()
+        {
+            try
+            {
+                string versionsDirectory = Path.Combine(minecraftDirectory, "versions");
+                if (!Directory.Exists(versionsDirectory)) return false;
+                foreach (string directory in Directory.GetDirectories(versionsDirectory, "fabric-loader-*-1.12.2"))
+                {
+                    string name = Path.GetFileName(directory);
+                    if (File.Exists(Path.Combine(directory, name + ".json"))) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private string DetectMinecraftLauncherType()
+        {
+            string microsoftStore = Path.Combine(minecraftDirectory, "launcher_profiles_microsoft_store.json");
+            string win32 = Path.Combine(minecraftDirectory, "launcher_profiles.json");
+            if (File.Exists(microsoftStore)) return "microsoft_store";
+            if (File.Exists(win32)) return "win32";
+            return null;
+        }
+
+        private void RefreshLauncherStatus()
+        {
+            if (launcherStatusText == null) return;
+            Directory.CreateDirectory(Path.Combine(minecraftDirectory, "mods"));
+            launcherModsPathText.Text = Path.Combine(minecraftDirectory, "mods");
+            if (IsLegacyFabric1122Installed())
+                launcherStatusText.Text = "Legacy Fabric 1.12.2 установлен · можно запускать";
+            else if (DetectMinecraftLauncherType() == null)
+                launcherStatusText.Text = "Сначала один раз запустите официальный Minecraft Launcher";
+            else
+                launcherStatusText.Text = "Legacy Fabric 1.12.2 будет установлен при первом запуске";
+        }
+
+        private async void LaunchVelvetMinecraft()
+        {
+            if (launcherLaunchButton == null || !launcherLaunchButton.IsEnabled) return;
+            launcherLaunchButton.IsEnabled = false;
+            try
+            {
+                Directory.CreateDirectory(minecraftDirectory);
+                Directory.CreateDirectory(Path.Combine(minecraftDirectory, "mods"));
+                string launcherType = DetectMinecraftLauncherType();
+
+                if (launcherType == null)
+                {
+                    launcherStatusText.Text = "Открываю официальный Minecraft Launcher — войдите в Microsoft и закройте его после первого запуска";
+                    OpenOfficialMinecraftLauncher();
+                    ShowToast("Сначала войдите в официальный Minecraft Launcher");
+                    return;
+                }
+
+                if (!IsLegacyFabric1122Installed())
+                {
+                    launcherStatusText.Text = "Подготавливаю Legacy Fabric 1.12.2…";
+                    Directory.CreateDirectory(velvetLauncherDirectory);
+                    string installerPath = Path.Combine(velvetLauncherDirectory, "legacy-fabric-installer-0.11.1.exe");
+
+                    if (!File.Exists(installerPath))
+                    {
+                        launcherStatusText.Text = "Скачиваю официальный Legacy Fabric installer…";
+                        using (WebClient client = new WebClient())
+                        {
+                            client.Headers.Add(HttpRequestHeader.UserAgent, "VelvetLauncher/2.1");
+                            await client.DownloadFileTaskAsync(new Uri(LegacyFabricInstallerUrl), installerPath);
+                        }
+                    }
+
+                    launcherStatusText.Text = "Устанавливаю Legacy Fabric 1.12.2…";
+                    ProcessStartInfo installerInfo = new ProcessStartInfo
+                    {
+                        FileName = installerPath,
+                        Arguments = "client -dir \"" + minecraftDirectory + "\" -mcversion 1.12.2 -launcher " + launcherType,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        WorkingDirectory = velvetLauncherDirectory
+                    };
+
+                    using (Process installer = Process.Start(installerInfo))
+                    {
+                        string output = await installer.StandardOutput.ReadToEndAsync();
+                        string error = await installer.StandardError.ReadToEndAsync();
+                        await Task.Run(delegate { installer.WaitForExit(); });
+                        if (installer.ExitCode != 0)
+                        {
+                            string message = string.IsNullOrWhiteSpace(error) ? output : error;
+                            throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? "Legacy Fabric installer завершился с ошибкой." : message.Trim());
+                        }
+                    }
+
+                    if (!IsLegacyFabric1122Installed()) throw new InvalidOperationException("Профиль Legacy Fabric 1.12.2 не появился после установки.");
+                }
+
+                launcherStatusText.Text = "Legacy Fabric 1.12.2 готов · открываю Minecraft Launcher";
+                OpenOfficialMinecraftLauncher();
+                ShowToast("Velvet Launcher: профиль 1.12.2 Fabric готов");
+            }
+            catch (Exception ex)
+            {
+                launcherStatusText.Text = "Ошибка запуска: " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось подготовить Minecraft 1.12.2");
+            }
+            finally
+            {
+                launcherLaunchButton.IsEnabled = true;
+            }
+        }
+
+        private static string ShortLauncherError(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "неизвестная ошибка";
+            string value = text.Replace("\r", " ").Replace("\n", " ").Trim();
+            return value.Length > 150 ? value.Substring(0, 150) + "…" : value;
+        }
+
+        private void OpenLauncherModsFolder()
+        {
+            try
+            {
+                string mods = Path.Combine(minecraftDirectory, "mods");
+                Directory.CreateDirectory(mods);
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + mods + "\"") { UseShellExecute = true });
+                launcherStatusText.Text = "Открыта папка mods";
+            }
+            catch (Exception ex)
+            {
+                ShowToast("Не удалось открыть папку: " + ShortLauncherError(ex.Message));
+            }
+        }
+
+        private void OpenOfficialMinecraftLauncher()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("minecraft://") { UseShellExecute = true });
+                return;
+            }
+            catch { }
+
+            string[] candidates = new string[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Minecraft Launcher", "MinecraftLauncher.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Minecraft Launcher", "MinecraftLauncher.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Minecraft Launcher", "MinecraftLauncher.exe")
+            };
+
+            foreach (string candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                {
+                    Process.Start(new ProcessStartInfo(candidate) { UseShellExecute = true });
+                    return;
+                }
+            }
+
+            throw new FileNotFoundException("Официальный Minecraft Launcher не найден.");
         }
 
         private void LoadHubData()
