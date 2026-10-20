@@ -1137,7 +1137,7 @@ namespace VelvetVault
             if (financeBalanceText == null) return;
             double balance = hubFinance.Sum(x => x.Amount);
             financeBalanceText.Text = balance.ToString("0.00", CultureInfo.InvariantCulture) + " ₴";
-            financeBalanceText.Foreground = GameBrush(balance < 0 ? "#FB7185" : "#34D399");
+            financeBalanceText.Foreground = new SolidColorBrush(ToColor(balance < 0 ? "#FB7185" : "#34D399"));
             if (financeList != null) financeList.Items.Refresh();
         }
 
