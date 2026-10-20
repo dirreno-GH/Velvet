@@ -103,11 +103,23 @@ namespace VelvetVault
         public DateTime UpdatedAt { get; set; }
     }
 
+    public class ScheduleItem
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public string StartTime { get; set; }
+        public string EndTime { get; set; }
+        public string Audience { get; set; }
+        [ScriptIgnore]
+        public string DisplayText { get { return StartTime + "–" + EndTime + "   " + Title + "   ·   " + Audience; } }
+    }
+
     public class TaskItem
     {
         public string Id { get; set; }
         public string Title { get; set; }
         public bool IsDone { get; set; }
+        public string DateKey { get; set; }
         [ScriptIgnore]
         public string DisplayTitle { get { return (IsDone ? "✓  " : "○  ") + Title; } }
     }
@@ -134,6 +146,8 @@ namespace VelvetVault
     {
         public List<NoteItem> Notes { get; set; }
         public List<TaskItem> Tasks { get; set; }
+        public List<ScheduleItem> Lessons { get; set; }
+        public List<ScheduleItem> Pairs { get; set; }
         public List<FinanceItem> Finance { get; set; }
         public List<DocumentItem> Documents { get; set; }
     }
@@ -322,6 +336,8 @@ namespace VelvetVault
         private readonly ObservableCollection<VaultEntry> entries = new ObservableCollection<VaultEntry>();
         private readonly ObservableCollection<NoteItem> hubNotes = new ObservableCollection<NoteItem>();
         private readonly ObservableCollection<TaskItem> hubTasks = new ObservableCollection<TaskItem>();
+        private readonly ObservableCollection<ScheduleItem> hubLessons = new ObservableCollection<ScheduleItem>();
+        private readonly ObservableCollection<ScheduleItem> hubPairs = new ObservableCollection<ScheduleItem>();
         private readonly ObservableCollection<FinanceItem> hubFinance = new ObservableCollection<FinanceItem>();
         private readonly ObservableCollection<DocumentItem> hubDocuments = new ObservableCollection<DocumentItem>();
         private ICollectionView entriesView;
@@ -387,6 +403,9 @@ namespace VelvetVault
         private TextBlock gameBackpackText;
         private TextBlock gameStatusText;
         private Grid notesView;
+        private Grid lessonsView;
+        private Grid pairsView;
+        private Grid timerView;
         private Grid tasksView;
         private Grid financeView;
         private Grid converterView;
@@ -395,8 +414,27 @@ namespace VelvetVault
         private ListBox notesList;
         private TextBox noteTitleBox;
         private TextBox noteTextBox;
+        private ListBox lessonsList;
+        private TextBox lessonTitleInput;
+        private TextBox lessonStartInput;
+        private TextBox lessonEndInput;
+        private TextBox lessonClassInput;
+        private ListBox pairsList;
+        private TextBox pairTitleInput;
+        private TextBox pairStartInput;
+        private TextBox pairEndInput;
+        private TextBox pairGroupInput;
+        private TextBlock timerDisplay;
+        private TextBlock timerStatus;
+        private TextBox timerMinutesInput;
+        private TextBox timerSecondsInput;
+        private DispatcherTimer countdownTimer;
+        private TimeSpan timerRemaining = TimeSpan.Zero;
+        private bool timerRunning;
         private ListBox tasksList;
         private TextBox taskInput;
+        private TextBlock todayDateText;
+        private ICollectionView tasksTodayView;
         private ListBox financeList;
         private TextBox financeDescriptionBox;
         private TextBox financeAmountBox;
@@ -447,8 +485,10 @@ namespace VelvetVault
             InitializeUi();
             WireEvents();
             LoadTheme();
-            InitializeMineGame();
             LoadHubData();
+            countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            countdownTimer.Tick += CountdownTimer_Tick;
+            UpdateTimerDisplay();
             ShowLogin();
             idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
             idleTimer.Tick += delegate { if (mainView.Visibility == Visibility.Visible && DateTime.Now - lastActivity > TimeSpan.FromMinutes(10)) LockVault("Хранилище заблокировано после 10 минут бездействия"); };
@@ -533,10 +573,12 @@ namespace VelvetVault
             <StackPanel Grid.Row='1'>
               <TextBlock Text='ПРИЛОЖЕНИЯ' Foreground='#696C83' FontSize='10' FontWeight='Bold' Margin='2,0,0,9'/>
               <Button x:Name='VaultAppButton' Style='{StaticResource AppNavActive}' Content='◆   Хранилище паролей'/>
-              <Button x:Name='MineAppButton' Style='{StaticResource AppNavButton}' Content='⛏   Шахта'/>
+              <Button x:Name='LessonsAppButton' Style='{StaticResource AppNavButton}' Content='▦   Расписание уроков'/>
+              <Button x:Name='PairsAppButton' Style='{StaticResource AppNavButton}' Content='▥   Расписание пар'/>
+              <Button x:Name='TimerAppButton' Style='{StaticResource AppNavButton}' Content='◷   Таймер'/>
+              <Button x:Name='TasksAppButton' Style='{StaticResource AppNavButton}' Content='✓   Задачи на сегодня'/>
               <Button x:Name='CalculatorAppButton' Style='{StaticResource AppNavButton}' Content='⌗   Калькулятор'/>
               <Button x:Name='NotesAppButton' Style='{StaticResource AppNavButton}' Content='▤   Заметки'/>
-              <Button x:Name='TasksAppButton' Style='{StaticResource AppNavButton}' Content='✓   Задачи'/>
               <Button x:Name='FinanceAppButton' Style='{StaticResource AppNavButton}' Content='₴   Финансы'/>
               <Button x:Name='FilesAppButton' Style='{StaticResource AppNavButton}' Content='⇄   Конвертер файлов'/>
               <Button x:Name='DocumentsAppButton' Style='{StaticResource AppNavButton}' Content='▧   Документы'/>
@@ -591,36 +633,56 @@ namespace VelvetVault
             </Border>
           </Grid>
         </Grid>
-        <Grid x:Name='GameView' Grid.Column='1' Visibility='Collapsed' Margin='28,22,28,24'>
+        <Grid x:Name='LessonsView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
+          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
+          <StackPanel Margin='0,0,0,20'><TextBlock Text='Расписание уроков' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Предмет, время начала и конца урока и класс' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
+          <Border Grid.Row='1' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='18' Margin='0,0,0,16'>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='2*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='160'/><ColumnDefinition Width='12'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
+              <StackPanel><TextBlock Style='{StaticResource Label}' Text='ПРЕДМЕТ'/><TextBox x:Name='LessonTitleInput' Style='{StaticResource Field}' ToolTip='Например: Математика'/></StackPanel>
+              <StackPanel Grid.Column='2'><TextBlock Style='{StaticResource Label}' Text='НАЧАЛО'/><TextBox x:Name='LessonStartInput' Style='{StaticResource Field}' ToolTip='08:30'/></StackPanel>
+              <StackPanel Grid.Column='4'><TextBlock Style='{StaticResource Label}' Text='КОНЕЦ'/><TextBox x:Name='LessonEndInput' Style='{StaticResource Field}' ToolTip='09:15'/></StackPanel>
+              <StackPanel Grid.Column='6'><TextBlock Style='{StaticResource Label}' Text='КЛАСС'/><TextBox x:Name='LessonClassInput' Style='{StaticResource Field}' ToolTip='Например: 7-А'/></StackPanel>
+              <Button x:Name='AddLessonButton' Grid.Column='8' Style='{StaticResource ActionButton}' Content='+ Добавить' VerticalAlignment='Bottom'/>
+            </Grid>
+          </Border>
+          <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='LessonsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
+          <Button x:Name='DeleteLessonButton' Grid.Row='3' Style='{StaticResource DangerButton}' Content='Удалить выбранный урок' HorizontalAlignment='Right' Margin='0,16,0,0'/>
+        </Grid>
+
+        <Grid x:Name='PairsView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
+          <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
+          <StackPanel Margin='0,0,0,20'><TextBlock Text='Расписание пар' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Предмет, начало и конец пары и учебная группа' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
+          <Border Grid.Row='1' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='18' Margin='0,0,0,16'>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='2*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='120'/><ColumnDefinition Width='12'/><ColumnDefinition Width='160'/><ColumnDefinition Width='12'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
+              <StackPanel><TextBlock Style='{StaticResource Label}' Text='ПРЕДМЕТ'/><TextBox x:Name='PairTitleInput' Style='{StaticResource Field}' ToolTip='Например: Программирование'/></StackPanel>
+              <StackPanel Grid.Column='2'><TextBlock Style='{StaticResource Label}' Text='НАЧАЛО'/><TextBox x:Name='PairStartInput' Style='{StaticResource Field}' ToolTip='09:00'/></StackPanel>
+              <StackPanel Grid.Column='4'><TextBlock Style='{StaticResource Label}' Text='КОНЕЦ'/><TextBox x:Name='PairEndInput' Style='{StaticResource Field}' ToolTip='10:30'/></StackPanel>
+              <StackPanel Grid.Column='6'><TextBlock Style='{StaticResource Label}' Text='ГРУППА'/><TextBox x:Name='PairGroupInput' Style='{StaticResource Field}' ToolTip='Например: КН-21'/></StackPanel>
+              <Button x:Name='AddPairButton' Grid.Column='8' Style='{StaticResource ActionButton}' Content='+ Добавить' VerticalAlignment='Bottom'/>
+            </Grid>
+          </Border>
+          <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='PairsList' DisplayMemberPath='DisplayText' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
+          <Button x:Name='DeletePairButton' Grid.Row='3' Style='{StaticResource DangerButton}' Content='Удалить выбранную пару' HorizontalAlignment='Right' Margin='0,16,0,0'/>
+        </Grid>
+
+        <Grid x:Name='TimerView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,30,28'>
           <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='*'/></Grid.RowDefinitions>
-          <Grid Grid.Row='0' Margin='0,0,0,18'>
-            <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
-            <StackPanel><TextBlock Text='Шахта' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Исследуйте шахту клавишами WASD и добывайте ресурсы' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
-            <StackPanel Grid.Column='1' Orientation='Horizontal' VerticalAlignment='Center'>
-              <Border Background='{DynamicResource SurfaceBrush}' CornerRadius='12' Padding='16,8' Margin='0,0,10,0'><StackPanel><TextBlock Text='МОНЕТЫ' Foreground='{DynamicResource Muted}' FontSize='9' FontWeight='Bold'/><TextBlock x:Name='GameCoinsText' Text='0' Foreground='#F59E0B' FontSize='18' FontWeight='Bold'/></StackPanel></Border>
-              <Border Background='{DynamicResource SurfaceBrush}' CornerRadius='12' Padding='16,8'><StackPanel><TextBlock Text='РУДА' Foreground='{DynamicResource Muted}' FontSize='9' FontWeight='Bold'/><TextBlock x:Name='GameOreText' Text='0 / 20' Foreground='#60A5FA' FontSize='18' FontWeight='Bold'/></StackPanel></Border>
-            </StackPanel>
-          </Grid>
-          <Grid Grid.Row='1'>
-            <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='18'/><ColumnDefinition Width='280'/></Grid.ColumnDefinitions>
-            <Border Background='#0B1220' BorderBrush='{DynamicResource Line}' BorderThickness='1' CornerRadius='18' Padding='12'>
-              <Viewbox Stretch='Uniform'><Canvas x:Name='GameCanvas' Width='896' Height='512' Background='#111827' ClipToBounds='True' Focusable='True'/></Viewbox>
-            </Border>
-            <Border Grid.Column='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='20'>
-              <Grid><Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
-                <StackPanel><TextBlock Text='Стив-шахтёр' Foreground='{DynamicResource Ink}' FontSize='20' FontWeight='Bold'/><TextBlock Text='Подойдите к блоку руды — кирка добудет его автоматически.' Foreground='{DynamicResource Muted}' FontSize='12' TextWrapping='Wrap' LineHeight='18' Margin='0,7,0,0'/></StackPanel>
-                <Border Grid.Row='1' Background='{DynamicResource SoftPanelBrush}' CornerRadius='13' Padding='13' Margin='0,16,0,14'><StackPanel><Grid><TextBlock Text='Кирка' Foreground='{DynamicResource Muted}'/><TextBlock x:Name='GamePickaxeText' Text='Уровень 1' Foreground='{DynamicResource Ink}' FontWeight='Bold' HorizontalAlignment='Right'/></Grid><Grid Margin='0,8,0,0'><TextBlock Text='Рюкзак' Foreground='{DynamicResource Muted}'/><TextBlock x:Name='GameBackpackText' Text='0 / 20' Foreground='{DynamicResource Ink}' FontWeight='Bold' HorizontalAlignment='Right'/></Grid><TextBlock Text='W A S D — движение' Foreground='#8B8FA4' FontSize='11' Margin='0,10,0,0'/></StackPanel></Border>
-                <StackPanel Grid.Row='2'>
-                  <Button x:Name='UpgradePickaxeButton' Style='{StaticResource ActionButton}' Content='Улучшение кирки' Margin='0,0,0,8'/>
-                  <Button x:Name='BackpackButton' Style='{StaticResource GhostButton}' Content='Рюкзак' Margin='0,0,0,8'/>
-                  <Button x:Name='UpgradeBackpackButton' Style='{StaticResource GhostButton}' Content='Улучшить рюкзак' Margin='0,0,0,8'/>
-                  <Button x:Name='SellResourcesButton' Style='{StaticResource GhostButton}' Content='Продать ресурсы' Margin='0,0,0,8'/>
-                  <Button x:Name='GameStatisticsButton' Style='{StaticResource GhostButton}' Content='Статистика'/>
-                </StackPanel>
-                <Border Grid.Row='3' Background='#182234' CornerRadius='12' Padding='12' Margin='0,15,0,0'><TextBlock x:Name='GameStatusText' Text='Найдите первый блок руды.' Foreground='#C7D2FE' FontSize='11' TextWrapping='Wrap' TextAlignment='Center'/></Border>
+          <StackPanel Margin='0,0,0,20'><TextBlock Text='Таймер' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Запустите обратный отсчёт на нужное время' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
+          <Border Grid.Row='1' Width='520' Background='{DynamicResource SurfaceBrush}' CornerRadius='22' Padding='30' HorizontalAlignment='Center' VerticalAlignment='Center'>
+            <StackPanel>
+              <TextBlock x:Name='TimerDisplay' Text='00:00' Foreground='{DynamicResource Ink}' FontSize='58' FontWeight='Bold' TextAlignment='Center' Margin='0,5,0,22'/>
+              <Grid Margin='0,0,0,18'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='14'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Style='{StaticResource Label}' Text='МИНУТЫ'/><TextBox x:Name='TimerMinutesInput' Text='25' Style='{StaticResource Field}' TextAlignment='Center'/></StackPanel>
+                <StackPanel Grid.Column='2'><TextBlock Style='{StaticResource Label}' Text='СЕКУНДЫ'/><TextBox x:Name='TimerSecondsInput' Text='0' Style='{StaticResource Field}' TextAlignment='Center'/></StackPanel>
               </Grid>
-            </Border>
-          </Grid>
+              <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='10'/><ColumnDefinition Width='*'/><ColumnDefinition Width='10'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
+                <Button x:Name='StartTimerButton' Style='{StaticResource ActionButton}' Content='▶ Старт'/>
+                <Button x:Name='PauseTimerButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='Ⅱ Пауза'/>
+                <Button x:Name='ResetTimerButton' Grid.Column='4' Style='{StaticResource DangerButton}' Content='↺ Сброс'/>
+              </Grid>
+              <TextBlock x:Name='TimerStatus' Text='Введите время и нажмите «Старт»' Foreground='{DynamicResource Muted}' FontSize='12' TextAlignment='Center' Margin='0,18,0,0'/>
+            </StackPanel>
+          </Border>
         </Grid>
 
         <Grid x:Name='CalculatorView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,30,28'>
@@ -651,10 +713,10 @@ namespace VelvetVault
 
         <Grid x:Name='TasksView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
           <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='Auto'/><RowDefinition Height='*'/><RowDefinition Height='Auto'/></Grid.RowDefinitions>
-          <StackPanel Margin='0,0,0,20'><TextBlock Text='Задачи' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Простой список дел с сохранением прогресса' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel>
-          <Grid Grid.Row='1' Margin='0,0,0,16'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions><TextBox x:Name='TaskInput' Style='{StaticResource Field}' Height='46' ToolTip='Введите новую задачу'/><Button x:Name='AddTaskButton' Grid.Column='2' Style='{StaticResource ActionButton}' Content='+ Добавить задачу'/></Grid>
+          <Grid Margin='0,0,0,20'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions><StackPanel><TextBlock Text='Задачи на сегодня' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/><TextBlock Text='Только дела на текущий день' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/></StackPanel><Border Grid.Column='1' Background='{DynamicResource SurfaceBrush}' CornerRadius='12' Padding='14,8' VerticalAlignment='Center'><TextBlock x:Name='TodayDateText' Foreground='{DynamicResource GhostTextBrush}' FontWeight='SemiBold'/></Border></Grid>
+          <Grid Grid.Row='1' Margin='0,0,0,16'><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions><TextBox x:Name='TaskInput' Style='{StaticResource Field}' Height='46' ToolTip='Введите задачу на сегодня'/><Button x:Name='AddTaskButton' Grid.Column='2' Style='{StaticResource ActionButton}' Content='+ Добавить задачу'/></Grid>
           <Border Grid.Row='2' Background='{DynamicResource SurfaceBrush}' CornerRadius='18' Padding='12'><ListBox x:Name='TasksList' DisplayMemberPath='DisplayTitle' Background='Transparent' BorderThickness='0' FontSize='15'/></Border>
-          <StackPanel Grid.Row='3' Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,16,0,0'><Button x:Name='ToggleTaskButton' Style='{StaticResource GhostButton}' Content='Изменить статус' Margin='0,0,10,0'/><Button x:Name='DeleteTaskButton' Style='{StaticResource DangerButton}' Content='Удалить'/></StackPanel>
+          <StackPanel Grid.Row='3' Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,16,0,0'><Button x:Name='ToggleTaskButton' Style='{StaticResource GhostButton}' Content='Выполнено / не выполнено' Margin='0,0,10,0'/><Button x:Name='DeleteTaskButton' Style='{StaticResource DangerButton}' Content='Удалить'/></StackPanel>
         </Grid>
 
         <Grid x:Name='FinanceView' Grid.Column='1' Visibility='Collapsed' Margin='30,24,28,25'>
@@ -705,10 +767,12 @@ namespace VelvetVault
             dialogOverlay = Find<Grid>("DialogOverlay"); dialogCard = Find<Border>("DialogCard"); dialogTitle = Find<TextBlock>("DialogTitle"); dialogMessage = Find<TextBlock>("DialogMessage"); dialogCancelButton = Find<Button>("DialogCancelButton"); dialogConfirmButton = Find<Button>("DialogConfirmButton");
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
-            gameView = Find<Grid>("GameView"); gameCanvas = Find<Canvas>("GameCanvas"); gameCoinsText = Find<TextBlock>("GameCoinsText"); gameOreText = Find<TextBlock>("GameOreText"); gamePickaxeText = Find<TextBlock>("GamePickaxeText"); gameBackpackText = Find<TextBlock>("GameBackpackText"); gameStatusText = Find<TextBlock>("GameStatusText");
+            lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput");
+            pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput");
+            timerView = Find<Grid>("TimerView"); timerDisplay = Find<TextBlock>("TimerDisplay"); timerStatus = Find<TextBlock>("TimerStatus"); timerMinutesInput = Find<TextBox>("TimerMinutesInput"); timerSecondsInput = Find<TextBox>("TimerSecondsInput");
             calculatorView = Find<Grid>("CalculatorView"); calculatorDisplay = Find<TextBox>("CalculatorDisplay");
             notesView = Find<Grid>("NotesView"); notesList = Find<ListBox>("NotesList"); noteTitleBox = Find<TextBox>("NoteTitleBox"); noteTextBox = Find<TextBox>("NoteTextBox");
-            tasksView = Find<Grid>("TasksView"); tasksList = Find<ListBox>("TasksList"); taskInput = Find<TextBox>("TaskInput");
+            tasksView = Find<Grid>("TasksView"); tasksList = Find<ListBox>("TasksList"); taskInput = Find<TextBox>("TaskInput"); todayDateText = Find<TextBlock>("TodayDateText");
             financeView = Find<Grid>("FinanceView"); financeList = Find<ListBox>("FinanceList"); financeDescriptionBox = Find<TextBox>("FinanceDescriptionBox"); financeAmountBox = Find<TextBox>("FinanceAmountBox"); financeTypeBox = Find<ComboBox>("FinanceTypeBox"); financeBalanceText = Find<TextBlock>("FinanceBalanceText");
             converterView = Find<Grid>("ConverterView"); converterSourceText = Find<TextBlock>("ConverterSourceText"); converterFormatBox = Find<ComboBox>("ConverterFormatBox");
             documentsView = Find<Grid>("DocumentsView"); documentsList = Find<ListBox>("DocumentsList"); documentTitleBox = Find<TextBox>("DocumentTitleBox"); documentContentBox = Find<TextBox>("DocumentContentBox");
@@ -723,18 +787,22 @@ namespace VelvetVault
             Find<Button>("MaxButton").Click += delegate { ToggleMaximize(); };
             Find<Button>("CloseButton").Click += delegate { Close(); };
             Find<Button>("VaultAppButton").Click += delegate { ShowVaultWorkspace(); };
-            Find<Button>("MineAppButton").Click += delegate { ShowMineGame(); };
+            Find<Button>("LessonsAppButton").Click += delegate { ShowModule(lessonsView, "LessonsAppButton"); lessonTitleInput.Focus(); };
+            Find<Button>("PairsAppButton").Click += delegate { ShowModule(pairsView, "PairsAppButton"); pairTitleInput.Focus(); };
+            Find<Button>("TimerAppButton").Click += delegate { ShowModule(timerView, "TimerAppButton"); };
+            Find<Button>("TasksAppButton").Click += delegate { RefreshTodayTasks(); ShowModule(tasksView, "TasksAppButton"); taskInput.Focus(); };
             Find<Button>("CalculatorAppButton").Click += delegate { ShowModule(calculatorView, "CalculatorAppButton"); };
             Find<Button>("NotesAppButton").Click += delegate { ShowModule(notesView, "NotesAppButton"); };
-            Find<Button>("TasksAppButton").Click += delegate { ShowModule(tasksView, "TasksAppButton"); taskInput.Focus(); };
             Find<Button>("FinanceAppButton").Click += delegate { ShowModule(financeView, "FinanceAppButton"); };
             Find<Button>("FilesAppButton").Click += delegate { ShowModule(converterView, "FilesAppButton"); };
             Find<Button>("DocumentsAppButton").Click += delegate { ShowModule(documentsView, "DocumentsAppButton"); };
-            Find<Button>("UpgradePickaxeButton").Click += delegate { UpgradePickaxe(); };
-            Find<Button>("BackpackButton").Click += delegate { ShowBackpack(); };
-            Find<Button>("UpgradeBackpackButton").Click += delegate { UpgradeBackpack(); };
-            Find<Button>("SellResourcesButton").Click += delegate { SellResources(); };
-            Find<Button>("GameStatisticsButton").Click += delegate { ShowGameStatistics(); };
+            Find<Button>("AddLessonButton").Click += delegate { AddScheduleItem(true); };
+            Find<Button>("DeleteLessonButton").Click += delegate { DeleteScheduleItem(true); };
+            Find<Button>("AddPairButton").Click += delegate { AddScheduleItem(false); };
+            Find<Button>("DeletePairButton").Click += delegate { DeleteScheduleItem(false); };
+            Find<Button>("StartTimerButton").Click += delegate { StartCountdown(); };
+            Find<Button>("PauseTimerButton").Click += delegate { PauseCountdown(); };
+            Find<Button>("ResetTimerButton").Click += delegate { ResetCountdown(); };
             Find<Button>("NewNoteButton").Click += delegate { AddNote(); };
             Find<Button>("SaveNoteButton").Click += delegate { SaveSelectedNote(); };
             Find<Button>("DeleteNoteButton").Click += delegate { DeleteSelectedNote(); };
@@ -779,7 +847,7 @@ namespace VelvetVault
             visiblePasswordBox.TextChanged += delegate { if (showPassword.IsChecked == true) UpdateStrength(visiblePasswordBox.Text); };
             themeSelector.SelectionChanged += delegate { ApplySelectedTheme(true); };
             PreviewMouseDown += delegate { lastActivity = DateTime.Now; };
-            PreviewKeyDown += delegate(object s, KeyEventArgs e) { lastActivity = DateTime.Now; if (e.Key == Key.Escape && dialogOverlay.Visibility == Visibility.Visible) { HideDialog(); e.Handled = true; return; } if (calculatorView.Visibility == Visibility.Visible && HandleCalculatorKey(e)) { e.Handled = true; return; } if (gameView.Visibility == Visibility.Visible && HandleGameKey(e.Key)) e.Handled = true; };
+            PreviewKeyDown += delegate(object s, KeyEventArgs e) { lastActivity = DateTime.Now; if (e.Key == Key.Escape && dialogOverlay.Visibility == Visibility.Visible) { HideDialog(); e.Handled = true; return; } if (calculatorView.Visibility == Visibility.Visible && HandleCalculatorKey(e)) { e.Handled = true; return; } };
             StateChanged += delegate { UpdateWindowChrome(); };
             Loaded += delegate { UpdateWindowChrome(); BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(420))); loginPassword.Focus(); };
             KeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.F11) ToggleMaximize(); };
@@ -811,206 +879,24 @@ namespace VelvetVault
             ShowModule(workspacePanel, "VaultAppButton");
         }
 
-        private void ShowMineGame()
-        {
-            ShowModule(gameView, "MineAppButton");
-            UpdateGameUi();
-            RenderMineGame();
-            gameStatusText.Text = "Двигайтесь клавишами WASD. Руда добывается при входе в блок.";
-            Dispatcher.BeginInvoke(new Action(delegate { gameCanvas.Focus(); }), DispatcherPriority.Input);
-        }
-
         private void ShowModule(FrameworkElement module, string activeButtonName)
         {
-            FrameworkElement[] modules = new FrameworkElement[] { workspacePanel, gameView, calculatorView, notesView, tasksView, financeView, converterView, documentsView };
+            FrameworkElement[] modules = new FrameworkElement[] { workspacePanel, lessonsView, pairsView, timerView, calculatorView, notesView, tasksView, financeView, converterView, documentsView };
             foreach (FrameworkElement item in modules) if (item != null) item.Visibility = item == module ? Visibility.Visible : Visibility.Collapsed;
-            string[] buttons = new string[] { "VaultAppButton", "MineAppButton", "CalculatorAppButton", "NotesAppButton", "TasksAppButton", "FinanceAppButton", "FilesAppButton", "DocumentsAppButton" };
+            string[] buttons = new string[] { "VaultAppButton", "LessonsAppButton", "PairsAppButton", "TimerAppButton", "TasksAppButton", "CalculatorAppButton", "NotesAppButton", "FinanceAppButton", "FilesAppButton", "DocumentsAppButton" };
             foreach (string name in buttons) Find<Button>(name).Style = (Style)Resources[name == activeButtonName ? "AppNavActive" : "AppNavButton"];
             if (module != null) Fade(module);
             lastActivity = DateTime.Now;
         }
 
-        private void InitializeMineGame()
-        {
-            LoadMineGame();
-            int[,] starterOre = new int[,] { { 2, 1 }, { 4, 1 }, { 6, 2 }, { 9, 1 }, { 12, 2 }, { 3, 4 }, { 7, 4 }, { 10, 5 }, { 1, 6 }, { 5, 6 }, { 9, 7 }, { 12, 6 } };
-            for (int i = 0; i < starterOre.GetLength(0); i++) gameOreCells.Add(GameCell(starterOre[i, 0], starterOre[i, 1]));
-            EnsureGameOre();
-            UpdateGameUi();
-            RenderMineGame();
-        }
-
-        private string GameCell(int x, int y) { return x.ToString(CultureInfo.InvariantCulture) + ":" + y.ToString(CultureInfo.InvariantCulture); }
-
-        private void EnsureGameOre()
-        {
-            int attempts = 0;
-            while (gameOreCells.Count < 18 && attempts++ < 200)
-            {
-                int x = gameRandom.Next(0, GameColumns);
-                int y = gameRandom.Next(0, GameRows);
-                if (x == gamePlayerX && y == gamePlayerY) continue;
-                gameOreCells.Add(GameCell(x, y));
-            }
-        }
-
-        private bool HandleGameKey(Key key)
-        {
-            int dx = 0, dy = 0;
-            if (key == Key.W || key == Key.Up) dy = -1;
-            else if (key == Key.S || key == Key.Down) dy = 1;
-            else if (key == Key.A || key == Key.Left) dx = -1;
-            else if (key == Key.D || key == Key.Right) dx = 1;
-            else return false;
-            MoveMiner(dx, dy);
-            return true;
-        }
-
-        private void MoveMiner(int dx, int dy)
-        {
-            int nextX = Math.Max(0, Math.Min(GameColumns - 1, gamePlayerX + dx));
-            int nextY = Math.Max(0, Math.Min(GameRows - 1, gamePlayerY + dy));
-            if (nextX == gamePlayerX && nextY == gamePlayerY) { gameStatusText.Text = "Здесь край шахты."; return; }
-
-            string cell = GameCell(nextX, nextY);
-            if (gameOreCells.Contains(cell))
-            {
-                int free = gameBackpackCapacity - gameOre;
-                if (free <= 0) { gameStatusText.Text = "Рюкзак заполнен. Продайте ресурсы или улучшите его."; return; }
-                int mined = Math.Min(free, gamePickaxeLevel);
-                gameOre += mined;
-                gameTotalMined += mined;
-                gameOreCells.Remove(cell);
-                gameStatusText.Text = "Добыто руды: " + mined.ToString(CultureInfo.InvariantCulture) + ".";
-            }
-            else gameStatusText.Text = "Вы исследуете шахту...";
-
-            gamePlayerX = nextX;
-            gamePlayerY = nextY;
-            gameSteps++;
-            EnsureGameOre();
-            UpdateGameUi();
-            RenderMineGame();
-            SaveMineGame();
-        }
-
-        private void UpgradePickaxe()
-        {
-            int cost = 20 * gamePickaxeLevel * gamePickaxeLevel;
-            if (gameCoins < cost) { gameStatusText.Text = "Для улучшения кирки нужно " + cost.ToString(CultureInfo.InvariantCulture) + " монет."; return; }
-            gameCoins -= cost;
-            gamePickaxeLevel++;
-            gameStatusText.Text = "Кирка улучшена до уровня " + gamePickaxeLevel.ToString(CultureInfo.InvariantCulture) + ".";
-            UpdateGameUi(); SaveMineGame();
-        }
-
-        private void ShowBackpack()
-        {
-            gameStatusText.Text = "В рюкзаке " + gameOre.ToString(CultureInfo.InvariantCulture) + " руды из " + gameBackpackCapacity.ToString(CultureInfo.InvariantCulture) + ".";
-        }
-
-        private void UpgradeBackpack()
-        {
-            int cost = gameBackpackCapacity * 2;
-            if (gameCoins < cost) { gameStatusText.Text = "Для улучшения рюкзака нужно " + cost.ToString(CultureInfo.InvariantCulture) + " монет."; return; }
-            gameCoins -= cost;
-            gameBackpackCapacity += 10;
-            gameStatusText.Text = "Рюкзак расширен до " + gameBackpackCapacity.ToString(CultureInfo.InvariantCulture) + " единиц.";
-            UpdateGameUi(); SaveMineGame();
-        }
-
-        private void SellResources()
-        {
-            if (gameOre <= 0) { gameStatusText.Text = "В рюкзаке пока нет ресурсов для продажи."; return; }
-            int earned = gameOre * (2 + gamePickaxeLevel / 2);
-            gameTotalSold += gameOre;
-            gameCoins += earned;
-            gameOre = 0;
-            gameStatusText.Text = "Ресурсы проданы за " + earned.ToString(CultureInfo.InvariantCulture) + " монет.";
-            UpdateGameUi(); SaveMineGame();
-        }
-
-        private void ShowGameStatistics()
-        {
-            gameStatusText.Text = "Добыто: " + gameTotalMined.ToString(CultureInfo.InvariantCulture) + " · Продано: " + gameTotalSold.ToString(CultureInfo.InvariantCulture) + " · Шагов: " + gameSteps.ToString(CultureInfo.InvariantCulture);
-        }
-
-        private void UpdateGameUi()
-        {
-            if (gameCoinsText == null) return;
-            gameCoinsText.Text = gameCoins.ToString(CultureInfo.InvariantCulture);
-            gameOreText.Text = gameOre.ToString(CultureInfo.InvariantCulture) + " / " + gameBackpackCapacity.ToString(CultureInfo.InvariantCulture);
-            gamePickaxeText.Text = "Уровень " + gamePickaxeLevel.ToString(CultureInfo.InvariantCulture);
-            gameBackpackText.Text = gameOre.ToString(CultureInfo.InvariantCulture) + " / " + gameBackpackCapacity.ToString(CultureInfo.InvariantCulture);
-            Find<Button>("UpgradePickaxeButton").Content = "Улучшение кирки · " + (20 * gamePickaxeLevel * gamePickaxeLevel).ToString(CultureInfo.InvariantCulture) + " монет";
-            Find<Button>("UpgradeBackpackButton").Content = "Улучшить рюкзак · " + (gameBackpackCapacity * 2).ToString(CultureInfo.InvariantCulture) + " монет";
-        }
-
-        private Brush GameBrush(string color) { return (Brush)new BrushConverter().ConvertFromString(color); }
-
-        private void RenderMineGame()
-        {
-            if (gameCanvas == null) return;
-            gameCanvas.Children.Clear();
-            for (int y = 0; y < GameRows; y++)
-            {
-                for (int x = 0; x < GameColumns; x++)
-                {
-                    Border tile = new Border { Width = GameTileSize, Height = GameTileSize, Background = GameBrush((x + y) % 2 == 0 ? "#1E293B" : "#243247"), BorderBrush = GameBrush("#334155"), BorderThickness = new Thickness(1) };
-                    Canvas.SetLeft(tile, x * GameTileSize); Canvas.SetTop(tile, y * GameTileSize); gameCanvas.Children.Add(tile);
-                    if (gameOreCells.Contains(GameCell(x, y)))
-                    {
-                        Border rock = new Border { Width = 46, Height = 46, CornerRadius = new CornerRadius(10), Background = GameBrush("#475569"), BorderBrush = GameBrush("#64748B"), BorderThickness = new Thickness(2), Child = new TextBlock { Text = "◆", Foreground = GameBrush("#60A5FA"), FontSize = 25, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-                        Canvas.SetLeft(rock, x * GameTileSize + 9); Canvas.SetTop(rock, y * GameTileSize + 9); Panel.SetZIndex(rock, 3); gameCanvas.Children.Add(rock);
-                    }
-                }
-            }
-
-            Canvas miner = new Canvas { Width = 46, Height = 56 };
-            AddGameRect(miner, 9, 0, 28, 22, "#C58D67");
-            AddGameRect(miner, 9, 0, 28, 7, "#3B261B");
-            AddGameRect(miner, 14, 10, 4, 4, "#E5F3FF");
-            AddGameRect(miner, 28, 10, 4, 4, "#E5F3FF");
-            AddGameRect(miner, 7, 22, 32, 23, "#14B8A6");
-            AddGameRect(miner, 8, 45, 14, 11, "#3157A4");
-            AddGameRect(miner, 24, 45, 14, 11, "#3157A4");
-            Canvas.SetLeft(miner, gamePlayerX * GameTileSize + 9); Canvas.SetTop(miner, gamePlayerY * GameTileSize + 4); Panel.SetZIndex(miner, 8); gameCanvas.Children.Add(miner);
-        }
-
-        private void AddGameRect(Canvas parent, double x, double y, double width, double height, string color)
-        {
-            System.Windows.Shapes.Rectangle part = new System.Windows.Shapes.Rectangle { Width = width, Height = height, Fill = GameBrush(color) };
-            Canvas.SetLeft(part, x); Canvas.SetTop(part, y); parent.Children.Add(part);
-        }
-
-        private void LoadMineGame()
-        {
-            try
-            {
-                if (!File.Exists(mineGamePath)) return;
-                MineGameSave save = new JavaScriptSerializer().Deserialize<MineGameSave>(File.ReadAllText(mineGamePath));
-                if (save == null) return;
-                gameCoins = Math.Max(0, save.Coins); gameOre = Math.Max(0, save.Ore); gameBackpackCapacity = Math.Max(20, save.BackpackCapacity); gamePickaxeLevel = Math.Max(1, save.PickaxeLevel); gameTotalMined = Math.Max(0, save.TotalMined); gameTotalSold = Math.Max(0, save.TotalSold); gameSteps = Math.Max(0, save.Steps);
-                gameOre = Math.Min(gameOre, gameBackpackCapacity);
-            }
-            catch { }
-        }
-
-        private void SaveMineGame()
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(mineGamePath));
-                MineGameSave save = new MineGameSave { Coins = gameCoins, Ore = gameOre, BackpackCapacity = gameBackpackCapacity, PickaxeLevel = gamePickaxeLevel, TotalMined = gameTotalMined, TotalSold = gameTotalSold, Steps = gameSteps };
-                File.WriteAllText(mineGamePath, new JavaScriptSerializer().Serialize(save));
-            }
-            catch { }
-        }
-
         private void LoadHubData()
         {
             notesList.ItemsSource = hubNotes;
-            tasksList.ItemsSource = hubTasks;
+            lessonsList.ItemsSource = hubLessons;
+            pairsList.ItemsSource = hubPairs;
+            tasksTodayView = CollectionViewSource.GetDefaultView(hubTasks);
+            tasksTodayView.Filter = delegate(object item) { TaskItem task = item as TaskItem; return task != null && task.DateKey == TodayKey(); };
+            tasksList.ItemsSource = tasksTodayView;
             financeList.ItemsSource = hubFinance;
             documentsList.ItemsSource = hubDocuments;
             try
@@ -1021,7 +907,9 @@ namespace VelvetVault
                     if (data != null)
                     {
                         if (data.Notes != null) foreach (NoteItem item in data.Notes) hubNotes.Add(item);
-                        if (data.Tasks != null) foreach (TaskItem item in data.Tasks) hubTasks.Add(item);
+                        if (data.Tasks != null) foreach (TaskItem item in data.Tasks) { if (string.IsNullOrEmpty(item.DateKey)) item.DateKey = TodayKey(); hubTasks.Add(item); }
+                        if (data.Lessons != null) foreach (ScheduleItem item in data.Lessons) hubLessons.Add(item);
+                        if (data.Pairs != null) foreach (ScheduleItem item in data.Pairs) hubPairs.Add(item);
                         if (data.Finance != null) foreach (FinanceItem item in data.Finance) hubFinance.Add(item);
                         if (data.Documents != null) foreach (DocumentItem item in data.Documents) hubDocuments.Add(item);
                     }
@@ -1029,6 +917,7 @@ namespace VelvetVault
             }
             catch { }
             UpdateFinanceBalance();
+            RefreshTodayTasks();
             if (hubNotes.Count > 0) notesList.SelectedIndex = 0;
             if (hubDocuments.Count > 0) documentsList.SelectedIndex = 0;
         }
@@ -1038,7 +927,7 @@ namespace VelvetVault
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(hubDataPath));
-                HubData data = new HubData { Notes = hubNotes.ToList(), Tasks = hubTasks.ToList(), Finance = hubFinance.ToList(), Documents = hubDocuments.ToList() };
+                HubData data = new HubData { Notes = hubNotes.ToList(), Tasks = hubTasks.ToList(), Lessons = hubLessons.ToList(), Pairs = hubPairs.ToList(), Finance = hubFinance.ToList(), Documents = hubDocuments.ToList() };
                 File.WriteAllText(hubDataPath, new JavaScriptSerializer().Serialize(data));
             }
             catch { }
@@ -1085,26 +974,144 @@ namespace VelvetVault
             hubNotes.Remove(note); selectedNote = null; noteTitleBox.Text = ""; noteTextBox.Text = ""; SaveHubData();
         }
 
+        private static string TodayKey() { return DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); }
+
+        private void RefreshTodayTasks()
+        {
+            if (todayDateText != null) todayDateText.Text = DateTime.Today.ToString("d MMMM yyyy", new CultureInfo("ru-RU"));
+            if (tasksTodayView != null) tasksTodayView.Refresh();
+        }
+
+        private static bool TryReadTime(string text, out TimeSpan value)
+        {
+            value = TimeSpan.Zero;
+            string raw = (text ?? "").Trim();
+            if (!TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out value)) return false;
+            return value >= TimeSpan.Zero && value < TimeSpan.FromDays(1);
+        }
+
+        private void AddScheduleItem(bool lesson)
+        {
+            TextBox title = lesson ? lessonTitleInput : pairTitleInput;
+            TextBox startBox = lesson ? lessonStartInput : pairStartInput;
+            TextBox endBox = lesson ? lessonEndInput : pairEndInput;
+            TextBox audienceBox = lesson ? lessonClassInput : pairGroupInput;
+            string subject = title.Text.Trim();
+            string audience = audienceBox.Text.Trim();
+            TimeSpan start, end;
+            if (subject.Length == 0) { ShowToast("Введите предмет"); title.Focus(); return; }
+            if (!TryReadTime(startBox.Text, out start) || !TryReadTime(endBox.Text, out end)) { ShowToast("Время укажите в формате 08:30"); return; }
+            if (end <= start) { ShowToast("Время окончания должно быть позже начала"); return; }
+            if (audience.Length == 0) { ShowToast(lesson ? "Укажите класс" : "Укажите группу"); audienceBox.Focus(); return; }
+
+            ScheduleItem item = new ScheduleItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Title = subject,
+                StartTime = start.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
+                EndTime = end.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
+                Audience = audience
+            };
+            ObservableCollection<ScheduleItem> target = lesson ? hubLessons : hubPairs;
+            target.Add(item);
+            title.Text = "";
+            startBox.Text = "";
+            endBox.Text = "";
+            SaveHubData();
+            title.Focus();
+            ShowToast(lesson ? "Урок добавлен" : "Пара добавлена");
+        }
+
+        private void DeleteScheduleItem(bool lesson)
+        {
+            ListBox list = lesson ? lessonsList : pairsList;
+            ScheduleItem item = list.SelectedItem as ScheduleItem;
+            if (item == null) { ShowToast(lesson ? "Выберите урок" : "Выберите пару"); return; }
+            (lesson ? hubLessons : hubPairs).Remove(item);
+            SaveHubData();
+            ShowToast(lesson ? "Урок удалён" : "Пара удалена");
+        }
+
+        private void StartCountdown()
+        {
+            if (timerRunning) return;
+            if (timerRemaining <= TimeSpan.Zero)
+            {
+                int minutes, seconds;
+                if (!int.TryParse(timerMinutesInput.Text.Trim(), out minutes)) minutes = 0;
+                if (!int.TryParse(timerSecondsInput.Text.Trim(), out seconds)) seconds = 0;
+                if (minutes < 0 || seconds < 0 || seconds > 59 || minutes > 999) { ShowToast("Минуты: 0–999, секунды: 0–59"); return; }
+                timerRemaining = TimeSpan.FromMinutes(minutes) + TimeSpan.FromSeconds(seconds);
+                if (timerRemaining <= TimeSpan.Zero) { ShowToast("Укажите время для таймера"); return; }
+            }
+            timerRunning = true;
+            countdownTimer.Start();
+            timerStatus.Text = "Таймер запущен";
+            UpdateTimerDisplay();
+        }
+
+        private void PauseCountdown()
+        {
+            if (countdownTimer != null) countdownTimer.Stop();
+            timerRunning = false;
+            timerStatus.Text = timerRemaining > TimeSpan.Zero ? "Таймер на паузе" : "Введите время и нажмите «Старт»";
+        }
+
+        private void ResetCountdown()
+        {
+            if (countdownTimer != null) countdownTimer.Stop();
+            timerRunning = false;
+            timerRemaining = TimeSpan.Zero;
+            timerMinutesInput.Text = "25";
+            timerSecondsInput.Text = "0";
+            timerStatus.Text = "Введите время и нажмите «Старт»";
+            UpdateTimerDisplay();
+        }
+
+        private void CountdownTimer_Tick(object sender, EventArgs e)
+        {
+            if (timerRemaining > TimeSpan.Zero) timerRemaining = timerRemaining.Subtract(TimeSpan.FromSeconds(1));
+            if (timerRemaining <= TimeSpan.Zero)
+            {
+                timerRemaining = TimeSpan.Zero;
+                countdownTimer.Stop();
+                timerRunning = false;
+                timerStatus.Text = "Время вышло!";
+                try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+                ShowToast("Таймер завершён");
+            }
+            UpdateTimerDisplay();
+        }
+
+        private void UpdateTimerDisplay()
+        {
+            if (timerDisplay == null) return;
+            int totalSeconds = Math.Max(0, (int)Math.Ceiling(timerRemaining.TotalSeconds));
+            int minutes = totalSeconds / 60;
+            int seconds = totalSeconds % 60;
+            timerDisplay.Text = minutes.ToString("00", CultureInfo.InvariantCulture) + ":" + seconds.ToString("00", CultureInfo.InvariantCulture);
+        }
+
         private void AddTask()
         {
             string title = taskInput.Text.Trim();
             if (title.Length == 0) { ShowToast("Введите название задачи"); return; }
-            hubTasks.Insert(0, new TaskItem { Id = Guid.NewGuid().ToString("N"), Title = title, IsDone = false });
-            taskInput.Text = ""; SaveHubData(); taskInput.Focus();
+            hubTasks.Insert(0, new TaskItem { Id = Guid.NewGuid().ToString("N"), Title = title, IsDone = false, DateKey = TodayKey() });
+            taskInput.Text = ""; SaveHubData(); RefreshTodayTasks(); taskInput.Focus();
         }
 
         private void ToggleSelectedTask()
         {
             TaskItem task = tasksList.SelectedItem as TaskItem;
             if (task == null) { ShowToast("Выберите задачу"); return; }
-            task.IsDone = !task.IsDone; tasksList.Items.Refresh(); SaveHubData();
+            task.IsDone = !task.IsDone; tasksList.Items.Refresh(); SaveHubData(); RefreshTodayTasks();
         }
 
         private void DeleteSelectedTask()
         {
             TaskItem task = tasksList.SelectedItem as TaskItem;
             if (task == null) { ShowToast("Выберите задачу"); return; }
-            hubTasks.Remove(task); SaveHubData();
+            hubTasks.Remove(task); SaveHubData(); RefreshTodayTasks();
         }
 
         private void AddFinanceOperation()
@@ -1773,7 +1780,6 @@ namespace VelvetVault
 
         protected override void OnClosed(EventArgs e)
         {
-            SaveMineGame();
             SaveHubData();
             if (sessionKey != null) Array.Clear(sessionKey, 0, sessionKey.Length);
             if (sessionSalt != null) Array.Clear(sessionSalt, 0, sessionSalt.Length);
