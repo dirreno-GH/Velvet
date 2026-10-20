@@ -16,7 +16,7 @@
 - ₴ Финансы
 - ⇄ Конвертер файлов
 - 📄 Документы
-- ◇ Velvet launcher — Minecraft Java 1.12.2, только Legacy Fabric, автоматическая подготовка профиля и папка `mods`
+- ◇ Velvet launcher — Minecraft Java 1.12.2, только Legacy Fabric, фоновая установка с прогрессом и отдельная папка `%LOCALAPPDATA%\\VelvetVault\\Minecraft\\mods`
 - 🎨 Светлая, тёмная, серая и тёмно-зелёная темы
 - 🔒 Автоблокировка хранилища
 
