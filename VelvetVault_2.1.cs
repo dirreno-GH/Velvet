@@ -782,8 +782,8 @@ namespace VelvetVault
 
               <Grid Margin='0,0,0,18'>
                 <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
-                <Button x:Name='ChooseMinecraftSourceButton' Visibility='Collapsed' Style='{StaticResource GhostButton}' Content='⌕  Импорт отключён'/>
-                <Button x:Name='OpenModsFolderButton' Grid.ColumnSpan='3' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet Minecraft'/>
+                <Button x:Name='ChooseMinecraftSourceButton' Style='{StaticResource GhostButton}' Content='⌕  Импортировать'/>
+                <Button x:Name='OpenModsFolderButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet Minecraft'/>
               </Grid>
 
               <Grid Margin='0,0,0,8'>
@@ -796,7 +796,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Без лицензии Velvet скачивает официальные файлы Mojang и запускает только Demo Mode. С подтверждённой Microsoft-лицензией запускается полная игра. Импорт из других лаунчеров не нужен.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Импорт локальной версии снова доступен. После подтверждения Microsoft-лицензии Velvet загружает список официальных release-версий и может сам скачать выбранную Vanilla.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -1475,9 +1475,11 @@ namespace VelvetVault
                 };
 
                 UpdateMicrosoftAccountUi();
-                launcherStatusText.Text = "Microsoft лицензия подтверждена · аккаунт " + profileName + " готов к запуску.";
+                launcherStatusText.Text = "Microsoft лицензия подтверждена · загружаю список официальных версий…";
+                await LoadOfficialReleaseVersionsIntoSelector();
+                launcherStatusText.Text = "Microsoft лицензия подтверждена · аккаунт " + profileName + " готов · доступны официальные release-версии.";
                 ShowToast("Minecraft лицензия подтверждена");
-                WriteLauncherLog("Microsoft лицензия подтверждена для Minecraft-профиля " + profileName + ". Токены в лог не записываются.");
+                WriteLauncherLog("Microsoft лицензия подтверждена для Minecraft-профиля " + profileName + ". Загружен официальный список release-версий. Токены в лог не записываются.");
             }
             catch (Exception ex)
             {
@@ -1498,9 +1500,7 @@ namespace VelvetVault
         {
             ComboBoxItem selected = launcherVersionSelector == null ? null : launcherVersionSelector.SelectedItem as ComboBoxItem;
             string tag = selected == null || selected.Tag == null ? "1.12.2" : selected.Tag.ToString();
-            if (string.Equals(tag, "1.8.9", StringComparison.OrdinalIgnoreCase)) return "1.8.9";
-            if (string.Equals(tag, "1.21.4", StringComparison.OrdinalIgnoreCase)) return "1.21.4";
-            return "1.12.2";
+            return string.IsNullOrWhiteSpace(tag) ? "1.12.2" : tag.Trim();
         }
 
         private bool IsLauncher189Selected()
@@ -1513,27 +1513,97 @@ namespace VelvetVault
             return string.Equals(SelectedLauncherVersion(), "1.21.4", StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool IsLauncher1122Selected()
+        {
+            return string.Equals(SelectedLauncherVersion(), "1.12.2", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsGenericVanillaSelected()
+        {
+            string version = SelectedLauncherVersion();
+            return !string.Equals(version, "1.8.9", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(version, "1.12.2", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(version, "1.21.4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsReleaseAtLeast189(string version)
+        {
+            if (string.IsNullOrWhiteSpace(version)) return false;
+            string[] parts = version.Split('.');
+            int major;
+            int minor;
+            int patch = 0;
+            if (parts.Length < 2
+                || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out major)
+                || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out minor))
+                return false;
+            if (parts.Length > 2) int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out patch);
+            if (major > 1) return true;
+            if (major < 1) return false;
+            if (minor > 8) return true;
+            if (minor < 8) return false;
+            return patch >= 9;
+        }
+
+        private async Task LoadOfficialReleaseVersionsIntoSelector()
+        {
+            if (launcherVersionSelector == null || !HasValidMicrosoftMinecraftSession()) return;
+
+            string selectedBefore = SelectedLauncherVersion();
+            string manifestJson = await DownloadOfficialMinecraftText("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json");
+            Dictionary<string, object> manifest = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(manifestJson);
+            if (manifest == null || !manifest.ContainsKey("versions")) return;
+
+            List<string> releases = new List<string>();
+            foreach (object raw in AsObjectArray(manifest["versions"]))
+            {
+                Dictionary<string, object> item = AsDictionary(raw);
+                if (item == null) continue;
+                if (!string.Equals(ReadString(item, "type", ""), "release", StringComparison.OrdinalIgnoreCase)) continue;
+                string id = ReadString(item, "id", "");
+                if (!IsReleaseAtLeast189(id)) continue;
+                if (string.Equals(id, "1.12.2", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!releases.Contains(id)) releases.Add(id);
+            }
+
+            launcherVersionSelector.Items.Clear();
+            launcherVersionSelector.Items.Add(new ComboBoxItem { Content = "1.12.2 · Legacy Fabric", Tag = "1.12.2" });
+            foreach (string version in releases)
+                launcherVersionSelector.Items.Add(new ComboBoxItem { Content = version + " · Vanilla", Tag = version });
+
+            ComboBoxItem selectedItem = null;
+            foreach (object raw in launcherVersionSelector.Items)
+            {
+                ComboBoxItem item = raw as ComboBoxItem;
+                if (item != null && item.Tag != null && string.Equals(item.Tag.ToString(), selectedBefore, StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedItem = item;
+                    break;
+                }
+            }
+            launcherVersionSelector.SelectedItem = selectedItem ?? (launcherVersionSelector.Items.Count > 0 ? launcherVersionSelector.Items[0] : null);
+            RefreshLauncherVersionUi();
+        }
+
         private void RefreshLauncherVersionUi()
         {
             if (launcherStatusText == null) return;
             string version = SelectedLauncherVersion();
-            bool is189 = string.Equals(version, "1.8.9", StringComparison.OrdinalIgnoreCase);
-            bool is1214 = string.Equals(version, "1.21.4", StringComparison.OrdinalIgnoreCase);
+            bool is1122 = string.Equals(version, "1.12.2", StringComparison.OrdinalIgnoreCase);
 
             launcherVersionText.Text = "Версия " + version;
-            launcherLoaderText.Text = is189 || is1214 ? "Модлоадер: Vanilla" : "Модлоадер: Legacy Fabric";
-            launcherVersionBadgeText.Text = is189 || is1214 ? "VANILLA" : "LEGACY FABRIC";
-            launcherDownloadButton.Content = "↓  Скачать " + version + (string.Equals(version, "1.12.2", StringComparison.OrdinalIgnoreCase) ? " + Fabric" : "");
-            chooseMinecraftSourceButton.Content = "⌕  Импорт отключён";
+            launcherLoaderText.Text = is1122 ? "Модлоадер: Legacy Fabric" : "Модлоадер: Vanilla";
+            launcherVersionBadgeText.Text = is1122 ? "LEGACY FABRIC" : "VANILLA";
+            launcherDownloadButton.Content = "↓  Скачать " + version + (is1122 ? " + Fabric" : "");
+            chooseMinecraftSourceButton.Content = "⌕  Импортировать " + version;
             launcherLaunchButton.IsEnabled = true;
             launcherDownloadButton.IsEnabled = true;
             launcherProgressBar.Value = 0;
             launcherProgressText.Text = "0%";
 
             string accessMode = HasValidMicrosoftMinecraftSession() ? "полная версия по Microsoft-лицензии" : "Demo Mode без лицензии";
-            if (is189) launcherStatusText.Text = "Vanilla 1.8.9 выбрана · " + accessMode + ".";
-            else if (is1214) launcherStatusText.Text = "Vanilla 1.21.4 выбрана · " + accessMode + ".";
-            else launcherStatusText.Text = "Legacy Fabric 1.12.2 выбрана · " + accessMode + ".";
+            if (is1122) launcherStatusText.Text = "Legacy Fabric 1.12.2 выбрана · " + accessMode + ".";
+            else launcherStatusText.Text = "Vanilla " + version + " выбрана · " + accessMode + ".";
 
             UpdateMicrosoftAccountUi();
         }
@@ -1542,21 +1612,24 @@ namespace VelvetVault
         {
             if (IsLauncher189Selected()) PrepareMinecraft189();
             else if (IsLauncher1214Selected()) PrepareMinecraft1214();
-            else DownloadVelvetMinecraft();
+            else if (IsLauncher1122Selected()) DownloadVelvetMinecraft();
+            else PrepareGenericVanillaVersion(SelectedLauncherVersion());
         }
 
         private void ChooseSelectedMinecraftSource()
         {
             if (IsLauncher189Selected()) ChooseMinecraft189Source();
             else if (IsLauncher1214Selected()) ChooseMinecraft1214Source();
-            else ChooseMinecraft1122Source();
+            else if (IsLauncher1122Selected()) ChooseMinecraft1122Source();
+            else ChooseGenericMinecraftSource(SelectedLauncherVersion());
         }
 
         private void LaunchSelectedMinecraft()
         {
             if (IsLauncher189Selected()) LaunchVelvetMinecraft189();
             else if (IsLauncher1214Selected()) LaunchVelvetMinecraft1214();
-            else LaunchVelvetMinecraft();
+            else if (IsLauncher1122Selected()) LaunchVelvetMinecraft();
+            else LaunchGenericVanillaVersion(SelectedLauncherVersion());
         }
 
         private static bool HasVersion189Files(string versionDir)
@@ -2141,6 +2214,442 @@ namespace VelvetVault
                 WriteLauncherLog("Ошибка запуска Minecraft 1.8.9: " + ex);
                 launcherStatusText.Text = "Ошибка запуска 1.8.9: " + ShortLauncherError(ex.Message);
                 ShowToast("Не удалось запустить Minecraft 1.8.9");
+            }
+        }
+
+        private static bool HasNamedVersionFiles(string versionDir, string versionId)
+        {
+            return !string.IsNullOrWhiteSpace(versionDir)
+                && !string.IsNullOrWhiteSpace(versionId)
+                && Directory.Exists(versionDir)
+                && File.Exists(Path.Combine(versionDir, versionId + ".jar"))
+                && File.Exists(Path.Combine(versionDir, versionId + ".json"));
+        }
+
+        private string GenericVanillaGameDirectory(string versionId)
+        {
+            return Path.Combine(velvetGameDirectory, "instances", versionId);
+        }
+
+        private void EnsureGenericVanillaGameFolders(string versionId)
+        {
+            string root = GenericVanillaGameDirectory(versionId);
+            string[] folders = new string[] { "resourcepacks", "saves", "config", "logs", "screenshots", "shaderpacks", "crash-reports" };
+            Directory.CreateDirectory(root);
+            foreach (string folder in folders) Directory.CreateDirectory(Path.Combine(root, folder));
+        }
+
+        private bool HasVelvetGenericVanillaFiles(string versionId)
+        {
+            string versionDir = Path.Combine(velvetGameDirectory, "versions", versionId);
+            return HasNamedVersionFiles(versionDir, versionId);
+        }
+
+        private void ImportGenericVanillaIntoVelvet(string versionId, string sourceVersionDir)
+        {
+            if (!HasNamedVersionFiles(sourceVersionDir, versionId))
+                throw new FileNotFoundException("Не найдены " + versionId + ".jar и " + versionId + ".json.");
+
+            EnsureVelvetGameFolders();
+            EnsureGenericVanillaGameFolders(versionId);
+
+            string preferredRoot = TryInferRootFromVersionDir(sourceVersionDir);
+            string librariesRoot = FindMinecraftDataRoot("libraries", preferredRoot);
+            string assetsRoot = FindMinecraftDataRoot("assets", preferredRoot);
+            if (librariesRoot == null) throw new DirectoryNotFoundException("Не найдена папка libraries.");
+            if (assetsRoot == null) throw new DirectoryNotFoundException("Не найдена папка assets.");
+
+            string targetVersion = Path.Combine(velvetGameDirectory, "versions", versionId);
+            Directory.CreateDirectory(targetVersion);
+            CopyFileTo(Path.Combine(sourceVersionDir, versionId + ".json"), Path.Combine(targetVersion, versionId + ".json"));
+            CopyFileTo(Path.Combine(sourceVersionDir, versionId + ".jar"), Path.Combine(targetVersion, versionId + ".jar"));
+
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            Dictionary<string, object> profile = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(sourceVersionDir, versionId + ".json")));
+            if (profile == null) throw new InvalidOperationException("Не удалось прочитать профиль " + versionId + ".");
+
+            if (profile.ContainsKey("libraries"))
+                foreach (object raw in AsObjectArray(profile["libraries"]))
+                    CopyVanillaLibraryToVelvet(librariesRoot, AsDictionary(raw));
+
+            Dictionary<string, object> assetIndex = profile.ContainsKey("assetIndex") ? AsDictionary(profile["assetIndex"]) : null;
+            string assetId = ReadString(assetIndex, "id", null);
+            if (!string.IsNullOrWhiteSpace(assetId))
+            {
+                string sourceIndex = Path.Combine(assetsRoot, "assets", "indexes", assetId + ".json");
+                if (!File.Exists(sourceIndex)) sourceIndex = Path.Combine(assetsRoot, "indexes", assetId + ".json");
+                if (File.Exists(sourceIndex))
+                {
+                    string targetIndex = Path.Combine(velvetGameDirectory, "assets", "indexes", assetId + ".json");
+                    CopyFileTo(sourceIndex, targetIndex);
+
+                    string objectsRoot = Directory.Exists(Path.Combine(assetsRoot, "assets", "objects"))
+                        ? Path.Combine(assetsRoot, "assets", "objects")
+                        : Path.Combine(assetsRoot, "objects");
+                    Dictionary<string, object> index = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(sourceIndex));
+                    Dictionary<string, object> objects = index != null && index.ContainsKey("objects") ? AsDictionary(index["objects"]) : null;
+                    if (objects != null)
+                    {
+                        foreach (object raw in objects.Values)
+                        {
+                            Dictionary<string, object> entry = AsDictionary(raw);
+                            string hash = ReadString(entry, "hash", null);
+                            if (string.IsNullOrWhiteSpace(hash) || hash.Length < 2) continue;
+                            string relative = Path.Combine(hash.Substring(0, 2), hash);
+                            CopyFileTo(Path.Combine(objectsRoot, relative), Path.Combine(velvetGameDirectory, "assets", "objects", relative));
+                        }
+                    }
+                }
+            }
+        }
+
+        private async void ChooseGenericMinecraftSource(string versionId)
+        {
+            try
+            {
+                OpenFileDialog dialog = new OpenFileDialog
+                {
+                    Title = "Выберите файл Minecraft " + versionId + ".jar",
+                    Filter = "Minecraft " + versionId + " (" + versionId + ".jar)|" + versionId + ".jar|JAR-файлы (*.jar)|*.jar",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+                if (dialog.ShowDialog(this) != true) return;
+                string versionDir = Path.GetDirectoryName(dialog.FileName);
+                if (!HasNamedVersionFiles(versionDir, versionId))
+                {
+                    launcherStatusText.Text = "Рядом с выбранным JAR не найден " + versionId + ".json";
+                    ShowToast("Выберите JAR из папки versions/" + versionId);
+                    return;
+                }
+
+                launcherDownloadBusy = true;
+                launcherDownloadButton.IsEnabled = false;
+                SetLauncherProgress(20, "Импортирую Minecraft " + versionId + "…");
+                await Task.Run(delegate { ImportGenericVanillaIntoVelvet(versionId, versionDir); });
+                SetLauncherProgress(100, "Готово · Minecraft " + versionId + " импортирована");
+                launcherStatusText.Text = "Готово · теперь нажмите «Запустить»";
+                ShowToast("Minecraft " + versionId + " импортирована");
+            }
+            catch (Exception ex)
+            {
+                WriteLauncherLog("Ошибка импорта Minecraft " + versionId + ": " + ex);
+                launcherStatusText.Text = "Ошибка импорта: " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось импортировать " + versionId);
+            }
+            finally
+            {
+                launcherDownloadBusy = false;
+                launcherDownloadButton.IsEnabled = true;
+                launcherLaunchButton.IsEnabled = true;
+            }
+        }
+
+        private async void PrepareGenericVanillaVersion(string versionId)
+        {
+            if (!HasValidMicrosoftMinecraftSession())
+            {
+                launcherStatusText.Text = "Для автоматического скачивания полной Minecraft войдите в Microsoft. Либо используйте «Импортировать».";
+                ShowToast("Для скачивания нужна Microsoft-лицензия");
+                return;
+            }
+            if (launcherDownloadBusy) return;
+
+            launcherDownloadBusy = true;
+            launcherDownloadButton.IsEnabled = false;
+            bool autoLaunch = false;
+            try
+            {
+                if (!HasVelvetGenericVanillaFiles(versionId))
+                    await DownloadOfficialMinecraftVersion(versionId, 5, 98);
+                SetLauncherProgress(100, "Готово · Minecraft " + versionId + " скачана");
+                launcherStatusText.Text = "Minecraft " + versionId + " готова · Microsoft лицензия";
+                ShowToast("Minecraft " + versionId + " готова");
+                autoLaunch = launcherAutoStartAfterPrepare && string.Equals(SelectedLauncherVersion(), versionId, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                launcherAutoStartAfterPrepare = false;
+                WriteLauncherLog("Ошибка скачивания Minecraft " + versionId + ": " + ex);
+                launcherStatusText.Text = "Ошибка скачивания " + versionId + ": " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось скачать " + versionId);
+            }
+            finally
+            {
+                launcherDownloadBusy = false;
+                launcherDownloadButton.IsEnabled = true;
+                launcherLaunchButton.IsEnabled = true;
+                if (autoLaunch)
+                {
+                    launcherAutoStartAfterPrepare = false;
+                    Dispatcher.BeginInvoke(new Action(delegate { LaunchSelectedMinecraft(); }));
+                }
+            }
+        }
+
+        private int RequiredJavaMajor(Dictionary<string, object> profile)
+        {
+            object raw;
+            if (profile != null && profile.TryGetValue("javaVersion", out raw))
+            {
+                Dictionary<string, object> javaVersion = AsDictionary(raw);
+                if (javaVersion != null && javaVersion.ContainsKey("majorVersion"))
+                {
+                    int major;
+                    if (int.TryParse(Convert.ToString(javaVersion["majorVersion"], CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out major) && major > 0)
+                        return major;
+                }
+            }
+            return 8;
+        }
+
+        private string FindJavaForMajor(int requiredMajor)
+        {
+            List<string> candidates = new List<string>();
+            Action<string> add = delegate(string path)
+            {
+                if (!string.IsNullOrWhiteSpace(path) && File.Exists(path) && !candidates.Any(x => string.Equals(x, path, StringComparison.OrdinalIgnoreCase)))
+                    candidates.Add(path);
+            };
+
+            string javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+            if (!string.IsNullOrWhiteSpace(javaHome))
+            {
+                add(Path.Combine(javaHome, "bin", "java.exe"));
+                add(Path.Combine(javaHome, "bin", "javaw.exe"));
+            }
+
+            string runtimeRoot = Path.Combine(minecraftDirectory, "runtime");
+            if (Directory.Exists(runtimeRoot))
+            {
+                try
+                {
+                    foreach (string java in Directory.GetFiles(runtimeRoot, "java.exe", SearchOption.AllDirectories)) add(java);
+                    foreach (string javaw in Directory.GetFiles(runtimeRoot, "javaw.exe", SearchOption.AllDirectories)) add(javaw);
+                }
+                catch { }
+            }
+
+            foreach (string root in new string[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) })
+            {
+                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
+                foreach (string vendor in new string[] { "Java", "Eclipse Adoptium", "Microsoft" })
+                {
+                    string vendorRoot = Path.Combine(root, vendor);
+                    if (!Directory.Exists(vendorRoot)) continue;
+                    try
+                    {
+                        foreach (string dir in Directory.GetDirectories(vendorRoot))
+                        {
+                            add(Path.Combine(dir, "bin", "java.exe"));
+                            add(Path.Combine(dir, "bin", "javaw.exe"));
+                            try
+                            {
+                                foreach (string sub in Directory.GetDirectories(dir))
+                                {
+                                    add(Path.Combine(sub, "bin", "java.exe"));
+                                    add(Path.Combine(sub, "bin", "javaw.exe"));
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            try
+            {
+                ProcessStartInfo whereInfo = new ProcessStartInfo { FileName = "where.exe", Arguments = "java.exe", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+                using (Process process = Process.Start(whereInfo))
+                {
+                    if (process != null)
+                    {
+                        string line;
+                        while ((line = process.StandardOutput.ReadLine()) != null) add(line.Trim());
+                        process.WaitForExit();
+                    }
+                }
+            }
+            catch { }
+
+            foreach (string candidate in candidates)
+                if (GetJavaMajorVersion(candidate) == requiredMajor) return candidate;
+            return null;
+        }
+
+        private string PrepareGenericNatives(string versionId, List<string> nativeJars)
+        {
+            string safe = string.Concat((versionId ?? "version").Select(ch => char.IsLetterOrDigit(ch) || ch == '.' || ch == '-' ? ch : '_'));
+            string nativesDir = Path.Combine(velvetLauncherDirectory, "natives-" + safe);
+            if (Directory.Exists(nativesDir)) { try { Directory.Delete(nativesDir, true); } catch { } }
+            Directory.CreateDirectory(nativesDir);
+
+            foreach (string jar in nativeJars)
+            {
+                using (FileStream stream = File.OpenRead(jar))
+                using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read))
+                {
+                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    {
+                        if (string.IsNullOrWhiteSpace(entry.Name)) continue;
+                        if (entry.FullName.StartsWith("META-INF/", StringComparison.OrdinalIgnoreCase)) continue;
+                        string destination = Path.Combine(nativesDir, Path.GetFileName(entry.Name));
+                        using (Stream source = entry.Open())
+                        using (FileStream target = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+                            source.CopyTo(target);
+                    }
+                }
+            }
+            return nativesDir;
+        }
+
+        private string BuildGenericVanillaGameArguments(Dictionary<string, object> profile, string versionId, string gameDir)
+        {
+            bool licensed = HasValidMicrosoftMinecraftSession();
+            string name = licensed ? microsoftMinecraftSession.ProfileName : "Player";
+            string uuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid("Player");
+            string token = licensed ? microsoftMinecraftSession.MinecraftAccessToken : "0";
+            string clientId = licensed ? microsoftMinecraftSession.ClientId : "";
+
+            string assetId = "";
+            Dictionary<string, object> assetIndex = profile != null && profile.ContainsKey("assetIndex") ? AsDictionary(profile["assetIndex"]) : null;
+            if (assetIndex != null) assetId = ReadString(assetIndex, "id", "");
+
+            Dictionary<string, string> replacements = new Dictionary<string, string>
+            {
+                { "$"+"{auth_player_name}", name },
+                { "$"+"{profile_name}", name },
+                { "$"+"{version_name}", versionId },
+                { "$"+"{game_directory}", gameDir },
+                { "$"+"{assets_root}", Path.Combine(velvetGameDirectory, "assets") },
+                { "$"+"{game_assets}", Path.Combine(velvetGameDirectory, "assets") },
+                { "$"+"{assets_index_name}", assetId },
+                { "$"+"{auth_uuid}", uuid },
+                { "$"+"{auth_access_token}", token },
+                { "$"+"{auth_session}", token },
+                { "$"+"{clientid}", clientId },
+                { "$"+"{auth_xuid}", "" },
+                { "$"+"{user_type}", licensed ? "msa" : "legacy" },
+                { "$"+"{version_type}", "release" },
+                { "$"+"{user_properties}", "{}" }
+            };
+
+            List<string> modern = ReadModernArguments(profile, "game");
+            if (modern.Count > 0)
+            {
+                for (int i = 0; i < modern.Count; i++) modern[i] = ReplaceLaunchVariables(modern[i], replacements);
+                return string.Join(" ", modern.Select(QuoteArgument));
+            }
+
+            string legacy = ReadString(profile, "minecraftArguments", "");
+            foreach (KeyValuePair<string, string> pair in replacements)
+                legacy = legacy.Replace(pair.Key, QuoteArgument(pair.Value));
+            return legacy;
+        }
+
+        private string BuildGenericVanillaJvmArguments(Dictionary<string, object> profile, string versionId, string nativesDir, string classPath)
+        {
+            List<string> tokens = ReadModernArguments(profile, "jvm");
+            Dictionary<string, string> replacements = new Dictionary<string, string>
+            {
+                { "$"+"{natives_directory}", nativesDir },
+                { "$"+"{launcher_name}", "Velvet" },
+                { "$"+"{launcher_version}", "2.1" },
+                { "$"+"{classpath}", classPath },
+                { "$"+"{classpath_separator}", Path.PathSeparator.ToString() },
+                { "$"+"{library_directory}", Path.Combine(velvetGameDirectory, "libraries") },
+                { "$"+"{version_name}", versionId },
+                { "$"+"{primary_jar}", Path.Combine(velvetGameDirectory, "versions", versionId, versionId + ".jar") }
+            };
+
+            if (tokens.Count > 0)
+            {
+                for (int i = 0; i < tokens.Count; i++) tokens[i] = ReplaceLaunchVariables(tokens[i], replacements);
+                bool hasClassPath = tokens.Any(x => string.Equals(x, "-cp", StringComparison.OrdinalIgnoreCase) || string.Equals(x, "-classpath", StringComparison.OrdinalIgnoreCase));
+                if (!hasClassPath) { tokens.Add("-cp"); tokens.Add(classPath); }
+                string loggingArgument = GetModernLoggingArgument(profile);
+                if (!string.IsNullOrWhiteSpace(loggingArgument)) tokens.Add(loggingArgument);
+                tokens.Insert(0, "-Xmx2048M");
+                tokens.Insert(0, "-Xms512M");
+                return string.Join(" ", tokens.Select(QuoteArgument));
+            }
+
+            return "-Xms512M -Xmx2048M"
+                + " -Djava.library.path=" + QuoteArgument(nativesDir)
+                + " -Dminecraft.launcher.brand=Velvet"
+                + " -Dminecraft.launcher.version=2.1"
+                + " -cp " + QuoteArgument(classPath);
+        }
+
+        private async void LaunchGenericVanillaVersion(string versionId)
+        {
+            if (!HasValidMicrosoftMinecraftSession())
+            {
+                launcherStatusText.Text = "Для полной Vanilla " + versionId + " войдите в Microsoft. Для локального файла можно использовать импорт, но полноценный online-запуск требует лицензию.";
+                ShowToast("Нужна Microsoft-лицензия");
+                return;
+            }
+
+            if (!HasVelvetGenericVanillaFiles(versionId))
+            {
+                launcherAutoStartAfterPrepare = true;
+                PrepareGenericVanillaVersion(versionId);
+                return;
+            }
+
+            try
+            {
+                EnsureGenericVanillaGameFolders(versionId);
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                string jsonPath = Path.Combine(velvetGameDirectory, "versions", versionId, versionId + ".json");
+                Dictionary<string, object> profile = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(jsonPath));
+                if (profile == null) throw new InvalidOperationException("Не удалось прочитать профиль " + versionId + ".");
+
+                int requiredJava = RequiredJavaMajor(profile);
+                launcherStatusText.Text = "Ищу Java " + requiredJava + " для Minecraft " + versionId + "…";
+                string java = await Task.Run(delegate { return FindJavaForMajor(requiredJava); });
+                if (string.IsNullOrWhiteSpace(java))
+                {
+                    launcherStatusText.Text = "Не найдена Java " + requiredJava + ", требуемая Minecraft " + versionId + ".";
+                    ShowToast("Нужна Java " + requiredJava);
+                    return;
+                }
+
+                List<string> classPath = new List<string>();
+                List<string> nativeJars = new List<string>();
+                CollectLibraries(profile, classPath, nativeJars);
+                string clientJar = Path.Combine(velvetGameDirectory, "versions", versionId, versionId + ".jar");
+                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден " + versionId + ".jar.");
+                classPath.Add(clientJar);
+
+                string mainClass = ReadString(profile, "mainClass", null);
+                if (string.IsNullOrWhiteSpace(mainClass)) throw new InvalidOperationException("Не найден mainClass для " + versionId + ".");
+
+                string nativesDir = await Task.Run(delegate { return PrepareGenericNatives(versionId, nativeJars); });
+                string cp = string.Join(Path.PathSeparator.ToString(), classPath);
+                string gameDir = GenericVanillaGameDirectory(versionId);
+                string jvmArgs = BuildGenericVanillaJvmArguments(profile, versionId, nativesDir, cp);
+                string gameArgs = BuildGenericVanillaGameArguments(profile, versionId, gameDir);
+
+                ProcessStartInfo info = new ProcessStartInfo
+                {
+                    FileName = java,
+                    Arguments = jvmArgs + " " + mainClass + " " + gameArgs,
+                    WorkingDirectory = gameDir,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                Process.Start(info);
+                launcherStatusText.Text = "Minecraft " + versionId + " Vanilla запущена · Microsoft лицензия · " + microsoftMinecraftSession.ProfileName;
+                ShowToast("Minecraft " + versionId + " запущена");
+                WriteLauncherLog("Minecraft " + versionId + " Vanilla запущена с Microsoft-лицензией.");
+            }
+            catch (Exception ex)
+            {
+                WriteLauncherLog("Ошибка запуска Minecraft " + versionId + ": " + ex);
+                launcherStatusText.Text = "Ошибка запуска " + versionId + ": " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось запустить " + versionId);
             }
         }
 
