@@ -165,6 +165,17 @@ namespace VelvetVault
         public byte[] KeyMaterial { get; set; }
     }
 
+    public class MicrosoftMinecraftSession
+    {
+        public string ClientId { get; set; }
+        public string MinecraftAccessToken { get; set; }
+        public string ProfileId { get; set; }
+        public string ProfileName { get; set; }
+        public DateTime ExpiresAtUtc { get; set; }
+        public bool OwnsMinecraft { get; set; }
+        public bool CanPlayMinecraft { get; set; }
+    }
+
     public static class VaultCrypto
     {
         private static readonly byte[] MagicV1 = Encoding.ASCII.GetBytes("VV01");
@@ -422,14 +433,20 @@ namespace VelvetVault
         private TextBlock launcherLoaderText;
         private TextBlock launcherVersionBadgeText;
         private Button chooseMinecraftSourceButton;
+        private TextBox launcherMicrosoftClientIdInput;
+        private Button launcherMicrosoftLoginButton;
+        private TextBlock launcherMicrosoftAccountText;
+        private MicrosoftMinecraftSession microsoftMinecraftSession;
         private bool launcherDownloadBusy;
         private bool launcherAutoStartAfterPrepare;
+        private bool launcherMicrosoftLoginBusy;
         private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
         private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
         private readonly string velvetGameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft");
         private readonly string velvetMinecraft1214GameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft", "instances", "1.21.4");
         private readonly string velvetMinecraftSourcePathFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher", "minecraft-source.txt");
         private readonly string velvetMinecraft1214SourcePathFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher", "minecraft-source-1.21.4.txt");
+        private readonly string velvetMicrosoftClientIdPathFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher", "microsoft-client-id.txt");
         private const string LegacyFabricMetaUrl = "https://meta.legacyfabric.net/";
         private const string LegacyFabricMavenUrl = "https://repo.legacyfabric.net/legacyfabric/";
         private Grid lessonsView;
@@ -741,6 +758,14 @@ namespace VelvetVault
               <TextBlock Style='{StaticResource Label}' Text='ЛОКАЛЬНЫЙ НИК'/>
               <TextBox x:Name='LauncherNicknameInput' Text='Player' Style='{StaticResource Field}' Height='46' Margin='0,0,0,16' ToolTip='3–16 символов: A-Z, a-z, 0-9 и _'/>
 
+              <TextBlock Style='{StaticResource Label}' Text='MICROSOFT ЛИЦЕНЗИЯ'/>
+              <Grid Margin='0,0,0,6'>
+                <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='190'/></Grid.ColumnDefinitions>
+                <TextBox x:Name='LauncherMicrosoftClientIdInput' Style='{StaticResource Field}' Height='46' ToolTip='Application (client) ID вашего Microsoft Entra приложения'/>
+                <Button x:Name='LauncherMicrosoftLoginButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='Войти через Microsoft'/>
+              </Grid>
+              <TextBlock x:Name='LauncherMicrosoftAccountText' Text='Лицензионный аккаунт не подключён · Client ID не является паролем или секретом' Foreground='{DynamicResource Muted}' FontSize='10' TextWrapping='Wrap' Margin='0,0,0,16'/>
+
               <TextBlock Style='{StaticResource Label}' Text='ПАПКА VELVET MINECRAFT'/>
               <Border Background='{DynamicResource FieldBrush}' BorderBrush='{DynamicResource FieldBorderBrush}' BorderThickness='1' CornerRadius='12' Padding='14,12' Margin='0,0,0,18'>
                 <TextBlock x:Name='LauncherModsPathText' Foreground='{DynamicResource Ink}' FontSize='12' TextWrapping='Wrap'/>
@@ -926,7 +951,7 @@ namespace VelvetVault
             dialogOverlay = Find<Grid>("DialogOverlay"); dialogCard = Find<Border>("DialogCard"); dialogTitle = Find<TextBlock>("DialogTitle"); dialogMessage = Find<TextBlock>("DialogMessage"); dialogCancelButton = Find<Button>("DialogCancelButton"); dialogConfirmButton = Find<Button>("DialogConfirmButton");
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
-            launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText"); launcherNicknameInput = Find<TextBox>("LauncherNicknameInput"); launcherVersionSelector = Find<ComboBox>("LauncherVersionSelector"); launcherVersionText = Find<TextBlock>("LauncherVersionText"); launcherLoaderText = Find<TextBlock>("LauncherLoaderText"); launcherVersionBadgeText = Find<TextBlock>("LauncherVersionBadgeText"); chooseMinecraftSourceButton = Find<Button>("ChooseMinecraftSourceButton");
+            launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText"); launcherNicknameInput = Find<TextBox>("LauncherNicknameInput"); launcherVersionSelector = Find<ComboBox>("LauncherVersionSelector"); launcherVersionText = Find<TextBlock>("LauncherVersionText"); launcherLoaderText = Find<TextBlock>("LauncherLoaderText"); launcherVersionBadgeText = Find<TextBlock>("LauncherVersionBadgeText"); chooseMinecraftSourceButton = Find<Button>("ChooseMinecraftSourceButton"); launcherMicrosoftClientIdInput = Find<TextBox>("LauncherMicrosoftClientIdInput"); launcherMicrosoftLoginButton = Find<Button>("LauncherMicrosoftLoginButton"); launcherMicrosoftAccountText = Find<TextBlock>("LauncherMicrosoftAccountText");
             launcherModsPathText.Text = velvetGameDirectory;
             lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput"); lessonDaySelector = Find<ComboBox>("LessonDaySelector");
             pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput"); pairDaySelector = Find<ComboBox>("PairDaySelector");
@@ -966,6 +991,7 @@ namespace VelvetVault
             Find<Button>("LauncherDownloadButton").Click += delegate { PrepareSelectedLauncherVersion(); };
             Find<Button>("LauncherLaunchButton").Click += delegate { LaunchSelectedMinecraft(); };
             Find<Button>("ChooseMinecraftSourceButton").Click += delegate { ChooseSelectedMinecraftSource(); };
+            Find<Button>("LauncherMicrosoftLoginButton").Click += delegate { MicrosoftLoginOrLogout(); };
             Find<Button>("OpenModsFolderButton").Click += delegate { OpenLauncherModsFolder(); };
             Find<Button>("AddLessonButton").Click += delegate { AddScheduleItem(true); };
             Find<Button>("DeleteLessonButton").Click += delegate { DeleteScheduleItem(true); };
@@ -1062,6 +1088,409 @@ namespace VelvetVault
             lastActivity = DateTime.Now;
         }
 
+        private bool HasValidMicrosoftMinecraftSession()
+        {
+            return microsoftMinecraftSession != null
+                && !string.IsNullOrWhiteSpace(microsoftMinecraftSession.MinecraftAccessToken)
+                && !string.IsNullOrWhiteSpace(microsoftMinecraftSession.ProfileId)
+                && !string.IsNullOrWhiteSpace(microsoftMinecraftSession.ProfileName)
+                && microsoftMinecraftSession.CanPlayMinecraft
+                && microsoftMinecraftSession.ExpiresAtUtc > DateTime.UtcNow.AddMinutes(1);
+        }
+
+        private void UpdateMicrosoftAccountUi()
+        {
+            if (launcherMicrosoftLoginButton == null || launcherMicrosoftAccountText == null) return;
+            if (HasValidMicrosoftMinecraftSession())
+            {
+                launcherMicrosoftLoginButton.Content = "Выйти из Microsoft";
+                launcherMicrosoftAccountText.Text = "Лицензия подтверждена · " + microsoftMinecraftSession.ProfileName
+                    + (microsoftMinecraftSession.OwnsMinecraft ? " · Minecraft куплен" : " · доступ к Minecraft подтверждён");
+                launcherNicknameInput.Text = microsoftMinecraftSession.ProfileName;
+            }
+            else
+            {
+                launcherMicrosoftLoginButton.Content = "Войти через Microsoft";
+                launcherMicrosoftAccountText.Text = "Лицензионный аккаунт не подключён · Client ID не является паролем или секретом";
+            }
+        }
+
+        private void MicrosoftLoginOrLogout()
+        {
+            if (HasValidMicrosoftMinecraftSession())
+            {
+                microsoftMinecraftSession = null;
+                UpdateMicrosoftAccountUi();
+                launcherStatusText.Text = "Microsoft-сессия удалена из памяти. Локальный/offline запуск снова активен.";
+                ShowToast("Выход из Microsoft выполнен");
+                return;
+            }
+            SignInMicrosoftMinecraft();
+        }
+
+        private string GetConfiguredMicrosoftClientId()
+        {
+            string typed = launcherMicrosoftClientIdInput == null ? "" : launcherMicrosoftClientIdInput.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(typed)) return typed;
+            try
+            {
+                if (File.Exists(velvetMicrosoftClientIdPathFile))
+                {
+                    string saved = File.ReadAllText(velvetMicrosoftClientIdPathFile).Trim();
+                    if (!string.IsNullOrWhiteSpace(saved))
+                    {
+                        if (launcherMicrosoftClientIdInput != null) launcherMicrosoftClientIdInput.Text = saved;
+                        return saved;
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private void SaveMicrosoftClientId(string clientId)
+        {
+            if (string.IsNullOrWhiteSpace(clientId)) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(velvetMicrosoftClientIdPathFile));
+            File.WriteAllText(velvetMicrosoftClientIdPathFile, clientId.Trim(), new UTF8Encoding(false));
+        }
+
+        private static string EncodeForm(Dictionary<string, string> values)
+        {
+            return string.Join("&", values.Select(pair =>
+                Uri.EscapeDataString(pair.Key ?? "") + "=" + Uri.EscapeDataString(pair.Value ?? "")));
+        }
+
+        private static string ReadWebExceptionBody(WebException ex)
+        {
+            try
+            {
+                HttpWebResponse response = ex == null ? null : ex.Response as HttpWebResponse;
+                if (response == null) return ex == null ? "" : ex.Message;
+                using (Stream stream = response.GetResponseStream())
+                using (StreamReader reader = new StreamReader(stream ?? Stream.Null, Encoding.UTF8))
+                    return reader.ReadToEnd();
+            }
+            catch
+            {
+                return ex == null ? "" : ex.Message;
+            }
+        }
+
+        private async Task<string> PostFormAsync(string url, Dictionary<string, string> values, bool allowHttpError)
+        {
+            using (WebClient client = new WebClient())
+            {
+                client.Encoding = Encoding.UTF8;
+                client.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
+                client.Headers[HttpRequestHeader.Accept] = "application/json";
+                client.Headers[HttpRequestHeader.UserAgent] = "VelvetLauncher/2.1";
+                try
+                {
+                    return await client.UploadStringTaskAsync(new Uri(url), "POST", EncodeForm(values));
+                }
+                catch (WebException ex)
+                {
+                    if (!allowHttpError) throw new InvalidOperationException(ReadWebExceptionBody(ex), ex);
+                    string body = ReadWebExceptionBody(ex);
+                    return string.IsNullOrWhiteSpace(body) ? "{\"error\":\"http_error\",\"error_description\":\"HTTP request failed\"}" : body;
+                }
+            }
+        }
+
+        private async Task<string> PostJsonAsync(string url, object payload, bool xboxContractHeader)
+        {
+            using (WebClient client = new WebClient())
+            {
+                client.Encoding = Encoding.UTF8;
+                client.Headers[HttpRequestHeader.ContentType] = "application/json";
+                client.Headers[HttpRequestHeader.Accept] = "application/json";
+                client.Headers[HttpRequestHeader.UserAgent] = "VelvetLauncher/2.1";
+                if (xboxContractHeader) client.Headers["x-xbl-contract-version"] = "1";
+                string json = new JavaScriptSerializer().Serialize(payload);
+                try
+                {
+                    return await client.UploadStringTaskAsync(new Uri(url), "POST", json);
+                }
+                catch (WebException ex)
+                {
+                    string body = ReadWebExceptionBody(ex);
+                    if (body.IndexOf("Invalid app registration", StringComparison.OrdinalIgnoreCase) >= 0)
+                        throw new InvalidOperationException("Microsoft Client ID ещё не одобрен Minecraft Services. Подайте Client ID на Minecraft AppID approval/allowlist.", ex);
+                    throw new InvalidOperationException(string.IsNullOrWhiteSpace(body) ? ex.Message : body, ex);
+                }
+            }
+        }
+
+        private async Task<string> GetJsonWithBearerAsync(string url, string bearer)
+        {
+            using (WebClient client = new WebClient())
+            {
+                client.Encoding = Encoding.UTF8;
+                client.Headers[HttpRequestHeader.Accept] = "application/json";
+                client.Headers[HttpRequestHeader.Authorization] = "Bearer " + bearer;
+                client.Headers[HttpRequestHeader.UserAgent] = "VelvetLauncher/2.1";
+                try
+                {
+                    return await client.DownloadStringTaskAsync(new Uri(url));
+                }
+                catch (WebException ex)
+                {
+                    throw new InvalidOperationException(ReadWebExceptionBody(ex), ex);
+                }
+            }
+        }
+
+        private static string ReadRequiredString(Dictionary<string, object> data, string key, string error)
+        {
+            if (data != null && data.ContainsKey(key))
+            {
+                string value = Convert.ToString(data[key], CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            throw new InvalidOperationException(error);
+        }
+
+        private static string ReadXboxUserHash(Dictionary<string, object> tokenResponse)
+        {
+            object displayClaimsRaw;
+            if (tokenResponse == null || !tokenResponse.TryGetValue("DisplayClaims", out displayClaimsRaw))
+                throw new InvalidOperationException("Xbox Live не вернул DisplayClaims.");
+            Dictionary<string, object> displayClaims = AsDictionary(displayClaimsRaw);
+            object xuiRaw;
+            if (displayClaims == null || !displayClaims.TryGetValue("xui", out xuiRaw))
+                throw new InvalidOperationException("Xbox Live не вернул xui.");
+            object[] xui = AsObjectArray(xuiRaw);
+            if (xui.Length == 0) throw new InvalidOperationException("Xbox Live не вернул профиль пользователя.");
+            Dictionary<string, object> first = AsDictionary(xui[0]);
+            return ReadRequiredString(first, "uhs", "Xbox Live не вернул user hash.");
+        }
+
+        private async Task<Dictionary<string, object>> RequestMicrosoftDeviceCode(string clientId)
+        {
+            string body = await PostFormAsync(
+                "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode",
+                new Dictionary<string, string>
+                {
+                    { "client_id", clientId },
+                    { "scope", "XboxLive.SignIn XboxLive.offline_access" }
+                },
+                false);
+            Dictionary<string, object> response = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
+            if (response == null) throw new InvalidOperationException("Microsoft вернул пустой ответ device code.");
+            return response;
+        }
+
+        private async Task<Dictionary<string, object>> PollMicrosoftDeviceToken(string clientId, string deviceCode, int expiresIn, int interval)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(Math.Max(60, expiresIn));
+            int waitSeconds = Math.Max(5, interval);
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            while (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(waitSeconds));
+                string body = await PostFormAsync(
+                    "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+                    new Dictionary<string, string>
+                    {
+                        { "client_id", clientId },
+                        { "grant_type", "urn:ietf:params:oauth:grant-type:device_code" },
+                        { "device_code", deviceCode }
+                    },
+                    true);
+                Dictionary<string, object> response = serializer.Deserialize<Dictionary<string, object>>(body);
+                if (response != null && response.ContainsKey("access_token")) return response;
+
+                string error = response != null && response.ContainsKey("error")
+                    ? Convert.ToString(response["error"], CultureInfo.InvariantCulture)
+                    : "unknown_error";
+                if (string.Equals(error, "authorization_pending", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(error, "slow_down", StringComparison.OrdinalIgnoreCase))
+                {
+                    waitSeconds += 5;
+                    continue;
+                }
+                string description = response != null && response.ContainsKey("error_description")
+                    ? Convert.ToString(response["error_description"], CultureInfo.InvariantCulture)
+                    : error;
+                throw new InvalidOperationException("Microsoft вход: " + description);
+            }
+            throw new TimeoutException("Код Microsoft истёк. Нажмите «Войти через Microsoft» ещё раз.");
+        }
+
+        private async Task<Dictionary<string, object>> GetXboxUserToken(string msaAccessToken)
+        {
+            Dictionary<string, object> payload = new Dictionary<string, object>
+            {
+                {
+                    "Properties",
+                    new Dictionary<string, object>
+                    {
+                        { "AuthMethod", "RPS" },
+                        { "SiteName", "user.auth.xboxlive.com" },
+                        { "RpsTicket", "d=" + msaAccessToken }
+                    }
+                },
+                { "RelyingParty", "http://auth.xboxlive.com" },
+                { "TokenType", "JWT" }
+            };
+            string body = await PostJsonAsync("https://user.auth.xboxlive.com/user/authenticate", payload, true);
+            Dictionary<string, object> response = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
+            if (response == null) throw new InvalidOperationException("Xbox Live вернул пустой User Token.");
+            return response;
+        }
+
+        private async Task<Dictionary<string, object>> GetMinecraftXstsToken(string xboxUserToken)
+        {
+            Dictionary<string, object> payload = new Dictionary<string, object>
+            {
+                {
+                    "Properties",
+                    new Dictionary<string, object>
+                    {
+                        { "SandboxId", "RETAIL" },
+                        { "UserTokens", new object[] { xboxUserToken } }
+                    }
+                },
+                { "RelyingParty", "rp://api.minecraftservices.com/" },
+                { "TokenType", "JWT" }
+            };
+            string body = await PostJsonAsync("https://xsts.auth.xboxlive.com/xsts/authorize", payload, true);
+            Dictionary<string, object> response = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
+            if (response == null) throw new InvalidOperationException("XSTS вернул пустой токен.");
+            return response;
+        }
+
+        private async Task<Dictionary<string, object>> GetMinecraftAccessToken(string userHash, string xstsToken)
+        {
+            Dictionary<string, object> payload = new Dictionary<string, object>
+            {
+                { "xtoken", "XBL3.0 x=" + userHash + ";" + xstsToken },
+                { "platform", "PC_LAUNCHER" }
+            };
+            string body = await PostJsonAsync("https://api.minecraftservices.com/launcher/login", payload, false);
+            Dictionary<string, object> response = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
+            if (response == null) throw new InvalidOperationException("Minecraft Services не вернул access token.");
+            return response;
+        }
+
+        private async Task<Tuple<bool, bool>> CheckMinecraftEntitlements(string minecraftAccessToken)
+        {
+            string url = "https://api.minecraftservices.com/entitlements/license?requestId=" + Guid.NewGuid().ToString("D");
+            string body = await GetJsonWithBearerAsync(url, minecraftAccessToken);
+            Dictionary<string, object> response = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
+            if (response == null || !response.ContainsKey("items")) throw new InvalidOperationException("Minecraft Services не вернул список лицензий.");
+            bool canPlay = false;
+            bool owns = false;
+            foreach (object raw in AsObjectArray(response["items"]))
+            {
+                Dictionary<string, object> item = AsDictionary(raw);
+                if (item == null || !item.ContainsKey("name")) continue;
+                string name = Convert.ToString(item["name"], CultureInfo.InvariantCulture);
+                if (string.Equals(name, "game_minecraft", StringComparison.OrdinalIgnoreCase)) canPlay = true;
+                if (string.Equals(name, "product_minecraft", StringComparison.OrdinalIgnoreCase)) owns = true;
+            }
+            return Tuple.Create(canPlay, owns);
+        }
+
+        private async Task<Dictionary<string, object>> GetMinecraftProfile(string minecraftAccessToken)
+        {
+            string body = await GetJsonWithBearerAsync("https://api.minecraftservices.com/minecraft/profile", minecraftAccessToken);
+            Dictionary<string, object> response = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
+            if (response == null) throw new InvalidOperationException("Minecraft Services не вернул профиль.");
+            return response;
+        }
+
+        private async void SignInMicrosoftMinecraft()
+        {
+            if (launcherMicrosoftLoginBusy) return;
+            string clientId = GetConfiguredMicrosoftClientId();
+            Guid parsedClientId;
+            if (string.IsNullOrWhiteSpace(clientId) || !Guid.TryParse(clientId, out parsedClientId))
+            {
+                launcherStatusText.Text = "Вставьте Application (client) ID из Microsoft Entra в поле «Microsoft лицензия».";
+                ShowToast("Сначала нужен Microsoft Client ID");
+                return;
+            }
+
+            launcherMicrosoftLoginBusy = true;
+            launcherMicrosoftLoginButton.IsEnabled = false;
+            launcherMicrosoftAccountText.Text = "Подготавливаю официальный вход Microsoft…";
+            try
+            {
+                SaveMicrosoftClientId(clientId);
+                Dictionary<string, object> device = await RequestMicrosoftDeviceCode(clientId);
+                string deviceCode = ReadRequiredString(device, "device_code", "Microsoft не вернул device_code.");
+                string userCode = ReadRequiredString(device, "user_code", "Microsoft не вернул user_code.");
+                string verificationUri = ReadRequiredString(device, "verification_uri", "Microsoft не вернул verification_uri.");
+                int expiresIn = device.ContainsKey("expires_in") ? Convert.ToInt32(device["expires_in"], CultureInfo.InvariantCulture) : 900;
+                int interval = device.ContainsKey("interval") ? Convert.ToInt32(device["interval"], CultureInfo.InvariantCulture) : 5;
+
+                try { Clipboard.SetText(userCode); } catch { }
+                launcherMicrosoftAccountText.Text = "Код " + userCode + " скопирован · войдите на официальной странице Microsoft";
+                launcherStatusText.Text = "Открыл страницу Microsoft. Введите код " + userCode + " и подтвердите вход.";
+                Process.Start(new ProcessStartInfo(verificationUri) { UseShellExecute = true });
+
+                Dictionary<string, object> msa = await PollMicrosoftDeviceToken(clientId, deviceCode, expiresIn, interval);
+                string msaAccessToken = ReadRequiredString(msa, "access_token", "Microsoft не вернул access token.");
+
+                launcherStatusText.Text = "Microsoft вход выполнен · авторизую Xbox Live…";
+                Dictionary<string, object> xboxUser = await GetXboxUserToken(msaAccessToken);
+                string xboxUserToken = ReadRequiredString(xboxUser, "Token", "Xbox Live не вернул User Token.");
+
+                launcherStatusText.Text = "Xbox Live готов · получаю Minecraft XSTS…";
+                Dictionary<string, object> xsts = await GetMinecraftXstsToken(xboxUserToken);
+                string xstsToken = ReadRequiredString(xsts, "Token", "XSTS не вернул токен.");
+                string userHash = ReadXboxUserHash(xsts);
+
+                launcherStatusText.Text = "XSTS готов · проверяю Minecraft Services…";
+                Dictionary<string, object> minecraftLogin = await GetMinecraftAccessToken(userHash, xstsToken);
+                string minecraftAccessToken = ReadRequiredString(minecraftLogin, "access_token", "Minecraft Services не вернул access token.");
+                int minecraftExpires = minecraftLogin.ContainsKey("expires_in")
+                    ? Convert.ToInt32(minecraftLogin["expires_in"], CultureInfo.InvariantCulture)
+                    : 86400;
+
+                launcherStatusText.Text = "Проверяю лицензию Minecraft…";
+                Tuple<bool, bool> entitlements = await CheckMinecraftEntitlements(minecraftAccessToken);
+                if (!entitlements.Item1)
+                    throw new InvalidOperationException("На этом Microsoft-аккаунте Minecraft Java не доступен.");
+
+                launcherStatusText.Text = "Лицензия найдена · получаю Minecraft-профиль…";
+                Dictionary<string, object> profile = await GetMinecraftProfile(minecraftAccessToken);
+                string profileId = ReadRequiredString(profile, "id", "Minecraft-профиль не содержит UUID.");
+                string profileName = ReadRequiredString(profile, "name", "Minecraft-профиль не содержит имя.");
+
+                microsoftMinecraftSession = new MicrosoftMinecraftSession
+                {
+                    ClientId = clientId,
+                    MinecraftAccessToken = minecraftAccessToken,
+                    ProfileId = profileId,
+                    ProfileName = profileName,
+                    ExpiresAtUtc = DateTime.UtcNow.AddSeconds(Math.Max(60, minecraftExpires)),
+                    OwnsMinecraft = entitlements.Item2,
+                    CanPlayMinecraft = entitlements.Item1
+                };
+
+                UpdateMicrosoftAccountUi();
+                launcherStatusText.Text = "Microsoft лицензия подтверждена · аккаунт " + profileName + " готов к запуску.";
+                ShowToast("Minecraft лицензия подтверждена");
+                WriteLauncherLog("Microsoft лицензия подтверждена для Minecraft-профиля " + profileName + ". Токены в лог не записываются.");
+            }
+            catch (Exception ex)
+            {
+                microsoftMinecraftSession = null;
+                UpdateMicrosoftAccountUi();
+                launcherStatusText.Text = "Microsoft вход: " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось подтвердить Minecraft лицензию");
+                WriteLauncherLog("Ошибка Microsoft/Minecraft авторизации: " + ex.GetType().Name + ": " + ShortLauncherError(ex.Message));
+            }
+            finally
+            {
+                launcherMicrosoftLoginBusy = false;
+                launcherMicrosoftLoginButton.IsEnabled = true;
+            }
+        }
+
         private string SelectedLauncherVersion()
         {
             ComboBoxItem selected = launcherVersionSelector == null ? null : launcherVersionSelector.SelectedItem as ComboBoxItem;
@@ -1090,6 +1519,7 @@ namespace VelvetVault
             launcherStatusText.Text = modern
                 ? "Vanilla 1.21.4 выбрана. Проверки начнутся только после нажатия кнопки."
                 : "Legacy Fabric 1.12.2 выбрана. Проверки начнутся только после нажатия кнопки.";
+            UpdateMicrosoftAccountUi();
         }
 
         private void PrepareSelectedLauncherVersion()
@@ -1455,22 +1885,26 @@ namespace VelvetVault
                 if (asset != null) assetIndex = ReadString(asset, "id", assetIndex);
             }
 
-            string uuid = OfflineUuid(nickname);
+            bool licensed = HasValidMicrosoftMinecraftSession();
+            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : nickname;
+            string uuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid(nickname);
+            string accessToken = licensed ? microsoftMinecraftSession.MinecraftAccessToken : "0";
+            string clientId = licensed ? microsoftMinecraftSession.ClientId : "";
             Dictionary<string, string> replacements = new Dictionary<string, string>
             {
-                { "$"+"{auth_player_name}", nickname },
-                { "$"+"{profile_name}", nickname },
+                { "$"+"{auth_player_name}", effectiveName },
+                { "$"+"{profile_name}", effectiveName },
                 { "$"+"{version_name}", "1.21.4" },
                 { "$"+"{game_directory}", velvetMinecraft1214GameDirectory },
                 { "$"+"{assets_root}", Path.Combine(velvetGameDirectory, "assets") },
                 { "$"+"{game_assets}", Path.Combine(velvetGameDirectory, "assets") },
                 { "$"+"{assets_index_name}", assetIndex },
                 { "$"+"{auth_uuid}", uuid },
-                { "$"+"{auth_access_token}", "0" },
-                { "$"+"{auth_session}", "0" },
-                { "$"+"{clientid}", "" },
+                { "$"+"{auth_access_token}", accessToken },
+                { "$"+"{auth_session}", accessToken },
+                { "$"+"{clientid}", clientId },
                 { "$"+"{auth_xuid}", "" },
-                { "$"+"{user_type}", "legacy" },
+                { "$"+"{user_type}", licensed ? "msa" : "legacy" },
                 { "$"+"{version_type}", "release" },
                 { "$"+"{user_properties}", "{}" }
             };
@@ -1746,7 +2180,8 @@ namespace VelvetVault
                     CreateNoWindow = true
                 };
                 Process.Start(info);
-                launcherStatusText.Text = "Minecraft 1.21.4 Vanilla запущена напрямую · ник " + nickname;
+                string launchedName = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : nickname;
+                launcherStatusText.Text = "Minecraft 1.21.4 Vanilla запущена напрямую · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "offline · ") + launchedName;
                 ShowToast("Minecraft 1.21.4 запущена");
                 WriteLauncherLog("Minecraft 1.21.4 Vanilla запущена через Java 21: " + java);
             }
@@ -2760,16 +3195,20 @@ namespace VelvetVault
                 if (asset != null) assetIndex = ReadString(asset, "id", assetIndex);
             }
 
+            bool licensed = HasValidMicrosoftMinecraftSession();
+            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : nickname;
+            string effectiveUuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid(nickname);
+            string effectiveToken = licensed ? microsoftMinecraftSession.MinecraftAccessToken : "0";
             Dictionary<string, string> replacements = new Dictionary<string, string>
             {
-                { "$"+"{auth_player_name}", QuoteArgument(nickname) },
+                { "$"+"{auth_player_name}", QuoteArgument(effectiveName) },
                 { "$"+"{version_name}", QuoteArgument(versionId) },
                 { "$"+"{game_directory}", QuoteArgument(velvetGameDirectory) },
                 { "$"+"{assets_root}", QuoteArgument(Path.Combine(velvetGameDirectory, "assets")) },
                 { "$"+"{assets_index_name}", QuoteArgument(assetIndex) },
-                { "$"+"{auth_uuid}", QuoteArgument(OfflineUuid(nickname)) },
-                { "$"+"{auth_access_token}", QuoteArgument("0") },
-                { "$"+"{user_type}", QuoteArgument("legacy") },
+                { "$"+"{auth_uuid}", QuoteArgument(effectiveUuid) },
+                { "$"+"{auth_access_token}", QuoteArgument(effectiveToken) },
+                { "$"+"{user_type}", QuoteArgument(licensed ? "msa" : "legacy") },
                 { "$"+"{version_type}", QuoteArgument("release") },
                 { "$"+"{user_properties}", QuoteArgument("{}") }
             };
@@ -2852,7 +3291,8 @@ namespace VelvetVault
                     CreateNoWindow = true
                 };
                 Process.Start(info);
-                launcherStatusText.Text = "Minecraft 1.12.2 Legacy Fabric запущен напрямую · ник " + nickname;
+                string launchedName = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : nickname;
+                launcherStatusText.Text = "Minecraft 1.12.2 Legacy Fabric запущен напрямую · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "offline · ") + launchedName;
                 ShowToast("Minecraft запущен");
             }
             catch (Exception ex)
@@ -3841,6 +4281,7 @@ namespace VelvetVault
         protected override void OnClosed(EventArgs e)
         {
             SaveHubData();
+            microsoftMinecraftSession = null;
             if (sessionKey != null) Array.Clear(sessionKey, 0, sessionKey.Length);
             if (sessionSalt != null) Array.Clear(sessionSalt, 0, sessionSalt.Length);
             base.OnClosed(e);
