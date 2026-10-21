@@ -417,12 +417,19 @@ namespace VelvetVault
         private TextBlock launcherStatusText;
         private TextBlock launcherModsPathText;
         private TextBox launcherNicknameInput;
+        private ComboBox launcherVersionSelector;
+        private TextBlock launcherVersionText;
+        private TextBlock launcherLoaderText;
+        private TextBlock launcherVersionBadgeText;
+        private Button chooseMinecraftSourceButton;
         private bool launcherDownloadBusy;
         private bool launcherAutoStartAfterPrepare;
         private readonly string minecraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
         private readonly string velvetLauncherDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher");
         private readonly string velvetGameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft");
+        private readonly string velvetMinecraft1214GameDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "Minecraft", "instances", "1.21.4");
         private readonly string velvetMinecraftSourcePathFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher", "minecraft-source.txt");
+        private readonly string velvetMinecraft1214SourcePathFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VelvetVault", "launcher", "minecraft-source-1.21.4.txt");
         private const string LegacyFabricMetaUrl = "https://meta.legacyfabric.net/";
         private const string LegacyFabricMavenUrl = "https://repo.legacyfabric.net/legacyfabric/";
         private Grid lessonsView;
@@ -707,7 +714,7 @@ namespace VelvetVault
           <Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='*'/></Grid.RowDefinitions>
           <StackPanel Margin='0,0,0,20'>
             <TextBlock Text='Velvet launcher' FontSize='28' FontWeight='Bold' Foreground='{DynamicResource Ink}'/>
-            <TextBlock Text='Minecraft 1.12.2 · только Legacy Fabric' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/>
+            <TextBlock Text='Minecraft 1.12.2 Legacy Fabric · Minecraft 1.21.4 Vanilla' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/>
           </StackPanel>
           <Border Grid.Row='1' Width='650' Background='{DynamicResource SurfaceBrush}' CornerRadius='24' Padding='30' HorizontalAlignment='Center' VerticalAlignment='Center'>
             <StackPanel>
@@ -716,14 +723,20 @@ namespace VelvetVault
                   <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
                   <StackPanel>
                     <TextBlock Text='Minecraft Java Edition' Foreground='{DynamicResource Ink}' FontSize='20' FontWeight='Bold'/>
-                    <TextBlock Text='Версия 1.12.2' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/>
-                    <TextBlock Text='Модлоадер: Legacy Fabric' Foreground='{DynamicResource GhostTextBrush}' FontSize='13' FontWeight='SemiBold' Margin='0,4,0,0'/>
+                    <TextBlock x:Name='LauncherVersionText' Text='Версия 1.12.2' Foreground='{DynamicResource Muted}' FontSize='13' Margin='0,5,0,0'/>
+                    <TextBlock x:Name='LauncherLoaderText' Text='Модлоадер: Legacy Fabric' Foreground='{DynamicResource GhostTextBrush}' FontSize='13' FontWeight='SemiBold' Margin='0,4,0,0'/>
                   </StackPanel>
                   <Border Grid.Column='1' Background='{DynamicResource GhostBrush}' CornerRadius='12' Padding='14,8' VerticalAlignment='Center'>
-                    <TextBlock Text='FABRIC ONLY' Foreground='{DynamicResource GhostTextBrush}' FontSize='11' FontWeight='Bold'/>
+                    <TextBlock x:Name='LauncherVersionBadgeText' Text='LEGACY FABRIC' Foreground='{DynamicResource GhostTextBrush}' FontSize='11' FontWeight='Bold'/>
                   </Border>
                 </Grid>
               </Border>
+
+              <TextBlock Style='{StaticResource Label}' Text='ВЕРСИЯ'/>
+              <ComboBox x:Name='LauncherVersionSelector' Style='{StaticResource ModernComboBox}' SelectedIndex='0' Margin='0,0,0,14'>
+                <ComboBoxItem Content='1.12.2 · Legacy Fabric' Tag='1.12.2'/>
+                <ComboBoxItem Content='1.21.4 · Vanilla' Tag='1.21.4'/>
+              </ComboBox>
 
               <TextBlock Style='{StaticResource Label}' Text='ЛОКАЛЬНЫЙ НИК'/>
               <TextBox x:Name='LauncherNicknameInput' Text='Player' Style='{StaticResource Field}' Height='46' Margin='0,0,0,16' ToolTip='3–16 символов: A-Z, a-z, 0-9 и _'/>
@@ -755,7 +768,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Страница открывается без сканирования диска. Нажмите «Запустить» — поиск 1.12.2 и Java пойдёт в фоне. Если версия не найдётся, можно вручную выбрать 1.12.2.jar.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Страница открывается без сканирования диска. Все проверки Minecraft и Java выполняются только после нажатия кнопок. Для 1.21.4 используются только уже установленные локальные файлы игры.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -913,7 +926,7 @@ namespace VelvetVault
             dialogOverlay = Find<Grid>("DialogOverlay"); dialogCard = Find<Border>("DialogCard"); dialogTitle = Find<TextBlock>("DialogTitle"); dialogMessage = Find<TextBlock>("DialogMessage"); dialogCancelButton = Find<Button>("DialogCancelButton"); dialogConfirmButton = Find<Button>("DialogConfirmButton");
             loginProgress = Find<Grid>("LoginProgress"); loginProgressGlow = Find<Border>("LoginProgressGlow");
             themeSelector = Find<ComboBox>("ThemeSelector"); healthScore = Find<TextBlock>("HealthScore"); strongCount = Find<TextBlock>("StrongCount"); mediumCount = Find<TextBlock>("MediumCount"); weakCount = Find<TextBlock>("WeakCount"); strongBar = Find<Border>("StrongBar"); mediumBar = Find<Border>("MediumBar"); weakBar = Find<Border>("WeakBar"); ambientCanvas = Find<Canvas>("AmbientCanvas"); sidebarPanel = Find<FrameworkElement>("SidebarPanel"); workspacePanel = Find<FrameworkElement>("WorkspacePanel");
-            launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText"); launcherNicknameInput = Find<TextBox>("LauncherNicknameInput");
+            launcherView = Find<Grid>("LauncherView"); launcherDownloadButton = Find<Button>("LauncherDownloadButton"); launcherLaunchButton = Find<Button>("LauncherLaunchButton"); launcherProgressBar = Find<ProgressBar>("LauncherProgressBar"); launcherProgressText = Find<TextBlock>("LauncherProgressText"); launcherStatusText = Find<TextBlock>("LauncherStatusText"); launcherModsPathText = Find<TextBlock>("LauncherModsPathText"); launcherNicknameInput = Find<TextBox>("LauncherNicknameInput"); launcherVersionSelector = Find<ComboBox>("LauncherVersionSelector"); launcherVersionText = Find<TextBlock>("LauncherVersionText"); launcherLoaderText = Find<TextBlock>("LauncherLoaderText"); launcherVersionBadgeText = Find<TextBlock>("LauncherVersionBadgeText"); chooseMinecraftSourceButton = Find<Button>("ChooseMinecraftSourceButton");
             launcherModsPathText.Text = velvetGameDirectory;
             lessonsView = Find<Grid>("LessonsView"); lessonsList = Find<ListBox>("LessonsList"); lessonTitleInput = Find<TextBox>("LessonTitleInput"); lessonStartInput = Find<TextBox>("LessonStartInput"); lessonEndInput = Find<TextBox>("LessonEndInput"); lessonClassInput = Find<TextBox>("LessonClassInput"); lessonDaySelector = Find<ComboBox>("LessonDaySelector");
             pairsView = Find<Grid>("PairsView"); pairsList = Find<ListBox>("PairsList"); pairTitleInput = Find<TextBox>("PairTitleInput"); pairStartInput = Find<TextBox>("PairStartInput"); pairEndInput = Find<TextBox>("PairEndInput"); pairGroupInput = Find<TextBox>("PairGroupInput"); pairDaySelector = Find<ComboBox>("PairDaySelector");
@@ -947,15 +960,12 @@ namespace VelvetVault
             Find<Button>("LauncherAppButton").Click += delegate
             {
                 ShowModule(launcherView, "LauncherAppButton");
-                launcherStatusText.Text = "Страница готова. Проверки начнутся только после нажатия кнопки.";
-                launcherProgressBar.Value = 0;
-                launcherProgressText.Text = "0%";
-                launcherLaunchButton.IsEnabled = true;
-                launcherDownloadButton.IsEnabled = true;
+                RefreshLauncherVersionUi();
             };
-            Find<Button>("LauncherDownloadButton").Click += delegate { DownloadVelvetMinecraft(); };
-            Find<Button>("LauncherLaunchButton").Click += delegate { LaunchVelvetMinecraft(); };
-            Find<Button>("ChooseMinecraftSourceButton").Click += delegate { ChooseMinecraft1122Source(); };
+            launcherVersionSelector.SelectionChanged += delegate { RefreshLauncherVersionUi(); };
+            Find<Button>("LauncherDownloadButton").Click += delegate { PrepareSelectedLauncherVersion(); };
+            Find<Button>("LauncherLaunchButton").Click += delegate { LaunchSelectedMinecraft(); };
+            Find<Button>("ChooseMinecraftSourceButton").Click += delegate { ChooseSelectedMinecraftSource(); };
             Find<Button>("OpenModsFolderButton").Click += delegate { OpenLauncherModsFolder(); };
             Find<Button>("AddLessonButton").Click += delegate { AddScheduleItem(true); };
             Find<Button>("DeleteLessonButton").Click += delegate { DeleteScheduleItem(true); };
@@ -1050,6 +1060,702 @@ namespace VelvetVault
             foreach (string name in buttons) Find<Button>(name).Style = (Style)Resources[name == activeButtonName ? "AppNavActive" : "AppNavButton"];
             if (module != null) Fade(module);
             lastActivity = DateTime.Now;
+        }
+
+        private string SelectedLauncherVersion()
+        {
+            ComboBoxItem selected = launcherVersionSelector == null ? null : launcherVersionSelector.SelectedItem as ComboBoxItem;
+            string tag = selected == null || selected.Tag == null ? "1.12.2" : selected.Tag.ToString();
+            return string.Equals(tag, "1.21.4", StringComparison.OrdinalIgnoreCase) ? "1.21.4" : "1.12.2";
+        }
+
+        private bool IsLauncher1214Selected()
+        {
+            return string.Equals(SelectedLauncherVersion(), "1.21.4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void RefreshLauncherVersionUi()
+        {
+            if (launcherStatusText == null) return;
+            bool modern = IsLauncher1214Selected();
+            launcherVersionText.Text = modern ? "Версия 1.21.4" : "Версия 1.12.2";
+            launcherLoaderText.Text = modern ? "Модлоадер: Vanilla" : "Модлоадер: Legacy Fabric";
+            launcherVersionBadgeText.Text = modern ? "VANILLA" : "LEGACY FABRIC";
+            launcherDownloadButton.Content = modern ? "↓  Импортировать 1.21.4" : "↓  Подготовить 1.12.2 + Fabric";
+            chooseMinecraftSourceButton.Content = modern ? "⌕  Выбрать установленную 1.21.4" : "⌕  Выбрать установленную 1.12.2";
+            launcherLaunchButton.IsEnabled = true;
+            launcherDownloadButton.IsEnabled = true;
+            launcherProgressBar.Value = 0;
+            launcherProgressText.Text = "0%";
+            launcherStatusText.Text = modern
+                ? "Vanilla 1.21.4 выбрана. Проверки начнутся только после нажатия кнопки."
+                : "Legacy Fabric 1.12.2 выбрана. Проверки начнутся только после нажатия кнопки.";
+        }
+
+        private void PrepareSelectedLauncherVersion()
+        {
+            if (IsLauncher1214Selected()) PrepareMinecraft1214();
+            else DownloadVelvetMinecraft();
+        }
+
+        private void ChooseSelectedMinecraftSource()
+        {
+            if (IsLauncher1214Selected()) ChooseMinecraft1214Source();
+            else ChooseMinecraft1122Source();
+        }
+
+        private void LaunchSelectedMinecraft()
+        {
+            if (IsLauncher1214Selected()) LaunchVelvetMinecraft1214();
+            else LaunchVelvetMinecraft();
+        }
+
+        private static bool HasVersion1214Files(string versionDir)
+        {
+            return !string.IsNullOrWhiteSpace(versionDir)
+                && Directory.Exists(versionDir)
+                && File.Exists(Path.Combine(versionDir, "1.21.4.jar"))
+                && File.Exists(Path.Combine(versionDir, "1.21.4.json"));
+        }
+
+        private string FindVersion1214Directory()
+        {
+            try
+            {
+                if (File.Exists(velvetMinecraft1214SourcePathFile))
+                {
+                    string saved = File.ReadAllText(velvetMinecraft1214SourcePathFile).Trim();
+                    if (HasVersion1214Files(saved)) return saved;
+                    string savedVersion = Path.Combine(saved, "versions", "1.21.4");
+                    if (HasVersion1214Files(savedVersion)) return savedVersion;
+                }
+            }
+            catch { }
+
+            List<string> roots = GetMinecraftSearchRoots();
+            foreach (string root in roots)
+            {
+                string direct = Path.Combine(root, "versions", "1.21.4");
+                if (HasVersion1214Files(direct)) return direct;
+                string direct2 = Path.Combine(root, "1.21.4");
+                if (HasVersion1214Files(direct2)) return direct2;
+            }
+
+            foreach (string root in roots)
+            {
+                try
+                {
+                    foreach (string jar in Directory.GetFiles(root, "1.21.4.jar", SearchOption.AllDirectories))
+                    {
+                        if (jar.StartsWith(velvetGameDirectory, StringComparison.OrdinalIgnoreCase)) continue;
+                        string dir = Path.GetDirectoryName(jar);
+                        if (HasVersion1214Files(dir)) return dir;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private bool HasVelvetMinecraft1214Files()
+        {
+            string versionDir = Path.Combine(velvetGameDirectory, "versions", "1.21.4");
+            string assetsIndex = Path.Combine(velvetGameDirectory, "assets", "indexes");
+            string libraries = Path.Combine(velvetGameDirectory, "libraries");
+            bool hasLibraries = false;
+            bool hasAssetIndex = false;
+            try { hasLibraries = Directory.Exists(libraries) && Directory.EnumerateFileSystemEntries(libraries).Any(); } catch { }
+            try { hasAssetIndex = Directory.Exists(assetsIndex) && Directory.EnumerateFiles(assetsIndex, "*.json", SearchOption.TopDirectoryOnly).Any(); } catch { }
+            return HasVersion1214Files(versionDir) && hasLibraries && hasAssetIndex;
+        }
+
+        private void EnsureVelvet1214GameFolders()
+        {
+            string[] folders = new string[] { "resourcepacks", "saves", "config", "logs", "screenshots", "shaderpacks", "crash-reports" };
+            Directory.CreateDirectory(velvetMinecraft1214GameDirectory);
+            foreach (string folder in folders) Directory.CreateDirectory(Path.Combine(velvetMinecraft1214GameDirectory, folder));
+        }
+
+        private void ImportMinecraft1214IntoVelvet(string sourceVersionDir)
+        {
+            if (!HasVersion1214Files(sourceVersionDir))
+                throw new FileNotFoundException("Не найдены 1.21.4.jar и 1.21.4.json для импорта.");
+
+            EnsureVelvetGameFolders();
+            EnsureVelvet1214GameFolders();
+
+            string preferredRoot = TryInferRootFromVersionDir(sourceVersionDir);
+            string librariesRoot = FindMinecraftDataRoot("libraries", preferredRoot);
+            string assetsRoot = FindMinecraftDataRoot("assets", preferredRoot);
+            if (librariesRoot == null) throw new DirectoryNotFoundException("Не найдена папка libraries для Minecraft 1.21.4.");
+            if (assetsRoot == null) throw new DirectoryNotFoundException("Не найдена папка assets для Minecraft 1.21.4.");
+
+            string targetVersion = Path.Combine(velvetGameDirectory, "versions", "1.21.4");
+            Directory.CreateDirectory(targetVersion);
+            CopyFileTo(Path.Combine(sourceVersionDir, "1.21.4.json"), Path.Combine(targetVersion, "1.21.4.json"));
+            CopyFileTo(Path.Combine(sourceVersionDir, "1.21.4.jar"), Path.Combine(targetVersion, "1.21.4.jar"));
+
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            Dictionary<string, object> vanilla = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(sourceVersionDir, "1.21.4.json")));
+            if (vanilla == null) throw new InvalidOperationException("Не удалось прочитать профиль Minecraft 1.21.4.");
+
+            if (vanilla.ContainsKey("libraries"))
+            {
+                foreach (object raw in AsObjectArray(vanilla["libraries"]))
+                    CopyVanillaLibraryToVelvet(librariesRoot, AsDictionary(raw));
+            }
+
+            string assetId = "19";
+            object assetIndexObject;
+            if (vanilla.TryGetValue("assetIndex", out assetIndexObject))
+            {
+                Dictionary<string, object> assetIndex = AsDictionary(assetIndexObject);
+                if (assetIndex != null && assetIndex.ContainsKey("id"))
+                    assetId = Convert.ToString(assetIndex["id"], CultureInfo.InvariantCulture);
+            }
+
+            string sourceIndex = Path.Combine(assetsRoot, "assets", "indexes", assetId + ".json");
+            if (!File.Exists(sourceIndex)) sourceIndex = Path.Combine(assetsRoot, "indexes", assetId + ".json");
+            if (!File.Exists(sourceIndex)) throw new FileNotFoundException("Не найден индекс assets для Minecraft 1.21.4.");
+
+            string targetIndex = Path.Combine(velvetGameDirectory, "assets", "indexes", assetId + ".json");
+            CopyFileTo(sourceIndex, targetIndex);
+
+            string assetsObjectsRoot = Directory.Exists(Path.Combine(assetsRoot, "assets", "objects"))
+                ? Path.Combine(assetsRoot, "assets", "objects")
+                : Path.Combine(assetsRoot, "objects");
+
+            Dictionary<string, object> index = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(sourceIndex));
+            object objectsObject;
+            if (index != null && index.TryGetValue("objects", out objectsObject))
+            {
+                Dictionary<string, object> objects = AsDictionary(objectsObject);
+                if (objects != null)
+                {
+                    foreach (object raw in objects.Values)
+                    {
+                        Dictionary<string, object> entry = AsDictionary(raw);
+                        if (entry == null || !entry.ContainsKey("hash")) continue;
+                        string hash = Convert.ToString(entry["hash"], CultureInfo.InvariantCulture);
+                        if (string.IsNullOrWhiteSpace(hash) || hash.Length < 2) continue;
+                        string relative = Path.Combine(hash.Substring(0, 2), hash);
+                        CopyFileTo(Path.Combine(assetsObjectsRoot, relative), Path.Combine(velvetGameDirectory, "assets", "objects", relative));
+                    }
+                }
+            }
+
+            string sourceLogConfigs = Directory.Exists(Path.Combine(assetsRoot, "assets", "log_configs"))
+                ? Path.Combine(assetsRoot, "assets", "log_configs")
+                : Path.Combine(assetsRoot, "log_configs");
+            if (Directory.Exists(sourceLogConfigs))
+            {
+                foreach (string file in Directory.GetFiles(sourceLogConfigs))
+                    CopyFileTo(file, Path.Combine(velvetGameDirectory, "assets", "log_configs", Path.GetFileName(file)));
+            }
+        }
+
+        private async void ChooseMinecraft1214Source()
+        {
+            try
+            {
+                OpenFileDialog dialog = new OpenFileDialog
+                {
+                    Title = "Выберите файл Minecraft 1.21.4.jar",
+                    Filter = "Minecraft 1.21.4 (1.21.4.jar)|1.21.4.jar|JAR-файлы (*.jar)|*.jar",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+                if (dialog.ShowDialog(this) != true) return;
+
+                string versionDir = Path.GetDirectoryName(dialog.FileName);
+                if (!HasVersion1214Files(versionDir))
+                {
+                    launcherStatusText.Text = "Рядом с выбранным 1.21.4.jar не найден 1.21.4.json";
+                    ShowToast("Выберите 1.21.4.jar из папки версии Minecraft");
+                    return;
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(velvetMinecraft1214SourcePathFile));
+                File.WriteAllText(velvetMinecraft1214SourcePathFile, versionDir, Encoding.UTF8);
+                launcherDownloadBusy = true;
+                launcherDownloadButton.IsEnabled = false;
+                SetLauncherProgress(20, "Импортирую локальную Minecraft 1.21.4 в Velvet…");
+                WriteLauncherLog("Пользователь выбрал version-dir Minecraft 1.21.4: " + versionDir);
+                await Task.Run(delegate { ImportMinecraft1214IntoVelvet(versionDir); });
+                SetLauncherProgress(100, "Готово · Minecraft 1.21.4 Vanilla импортирована");
+                launcherStatusText.Text = "Готово · теперь нажмите «Запустить»";
+                ShowToast("Minecraft 1.21.4 импортирована");
+                WriteLauncherLog("Ручной импорт Minecraft 1.21.4 завершён успешно.");
+            }
+            catch (Exception ex)
+            {
+                WriteLauncherLog("Ошибка импорта Minecraft 1.21.4: " + ex);
+                launcherStatusText.Text = "Ошибка импорта: " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось импортировать 1.21.4");
+            }
+            finally
+            {
+                launcherDownloadBusy = false;
+                launcherDownloadButton.IsEnabled = true;
+                launcherLaunchButton.IsEnabled = true;
+            }
+        }
+
+        private async void PrepareMinecraft1214()
+        {
+            if (launcherDownloadBusy)
+            {
+                launcherStatusText.Text = "Подготовка уже выполняется…";
+                return;
+            }
+
+            launcherDownloadBusy = true;
+            launcherDownloadButton.IsEnabled = false;
+            launcherLaunchButton.IsEnabled = true;
+            bool canAutoLaunch = false;
+            try
+            {
+                SetLauncherProgress(5, "Проверяю локальную Minecraft 1.21.4…");
+                bool imported = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
+                if (!imported)
+                {
+                    SetLauncherProgress(20, "Ищу уже установленную Minecraft 1.21.4…");
+                    string sourceVersionDir = await Task.Run(delegate { return FindVersion1214Directory(); });
+                    if (sourceVersionDir != null)
+                    {
+                        WriteLauncherLog("Найдена локальная Minecraft 1.21.4: " + sourceVersionDir);
+                        SetLauncherProgress(35, "Импортирую Minecraft 1.21.4 без скачивания client.jar…");
+                        await Task.Run(delegate { ImportMinecraft1214IntoVelvet(sourceVersionDir); });
+                        imported = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
+                    }
+                }
+
+                if (imported)
+                {
+                    SetLauncherProgress(100, "Готово · Minecraft 1.21.4 Vanilla подготовлена");
+                    ShowToast("Minecraft 1.21.4 Vanilla готова");
+                    WriteLauncherLog("Подготовка Minecraft 1.21.4 завершена успешно.");
+                    canAutoLaunch = launcherAutoStartAfterPrepare && IsLauncher1214Selected();
+                }
+                else
+                {
+                    launcherAutoStartAfterPrepare = false;
+                    SetLauncherProgress(100, "Minecraft 1.21.4 на ПК не найдена · выберите установленную 1.21.4.jar");
+                    ShowToast("Нужна уже установленная Minecraft 1.21.4");
+                    WriteLauncherLog("Minecraft 1.21.4 не найдена. Загрузка client.jar не выполнялась.");
+                }
+            }
+            catch (Exception ex)
+            {
+                launcherAutoStartAfterPrepare = false;
+                WriteLauncherLog("ОШИБКА 1.21.4: " + ex);
+                launcherStatusText.Text = "Ошибка 1.21.4: " + ShortLauncherError(ex.Message);
+                ShowToast("Ошибка подготовки 1.21.4");
+            }
+            finally
+            {
+                launcherDownloadBusy = false;
+                launcherDownloadButton.IsEnabled = true;
+                launcherLaunchButton.IsEnabled = true;
+                if (canAutoLaunch)
+                {
+                    launcherAutoStartAfterPrepare = false;
+                    Dispatcher.BeginInvoke(new Action(delegate { LaunchSelectedMinecraft(); }));
+                }
+            }
+        }
+
+        private static bool ModernArgumentAllowedOnWindows(Dictionary<string, object> argument)
+        {
+            if (argument == null || !argument.ContainsKey("rules")) return true;
+            bool allowed = false;
+            foreach (object rawRule in AsObjectArray(argument["rules"]))
+            {
+                Dictionary<string, object> rule = AsDictionary(rawRule);
+                if (rule == null) continue;
+                bool matches = true;
+                object osObject;
+                if (rule.TryGetValue("os", out osObject))
+                {
+                    Dictionary<string, object> os = AsDictionary(osObject);
+                    if (os != null && os.ContainsKey("name"))
+                    {
+                        string name = Convert.ToString(os["name"], CultureInfo.InvariantCulture);
+                        matches = string.Equals(name, "windows", StringComparison.OrdinalIgnoreCase);
+                    }
+                    if (matches && os != null && os.ContainsKey("arch"))
+                    {
+                        string arch = Convert.ToString(os["arch"], CultureInfo.InvariantCulture);
+                        if (string.Equals(arch, "x86", StringComparison.OrdinalIgnoreCase)) matches = !Environment.Is64BitOperatingSystem;
+                        else if (string.Equals(arch, "x86_64", StringComparison.OrdinalIgnoreCase) || string.Equals(arch, "amd64", StringComparison.OrdinalIgnoreCase)) matches = Environment.Is64BitOperatingSystem;
+                    }
+                }
+                if (rule.ContainsKey("features")) matches = false;
+                if (!matches) continue;
+                string action = rule.ContainsKey("action") ? Convert.ToString(rule["action"], CultureInfo.InvariantCulture) : "allow";
+                allowed = string.Equals(action, "allow", StringComparison.OrdinalIgnoreCase);
+            }
+            return allowed;
+        }
+
+        private static void AddModernArgumentValue(object value, List<string> output)
+        {
+            string text = value as string;
+            if (text != null)
+            {
+                output.Add(text);
+                return;
+            }
+            foreach (object raw in AsObjectArray(value))
+            {
+                string item = Convert.ToString(raw, CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(item)) output.Add(item);
+            }
+        }
+
+        private static List<string> ReadModernArguments(Dictionary<string, object> profile, string section)
+        {
+            List<string> result = new List<string>();
+            object argumentsObject;
+            if (profile == null || !profile.TryGetValue("arguments", out argumentsObject)) return result;
+            Dictionary<string, object> arguments = AsDictionary(argumentsObject);
+            if (arguments == null || !arguments.ContainsKey(section)) return result;
+            foreach (object raw in AsObjectArray(arguments[section]))
+            {
+                string direct = raw as string;
+                if (direct != null)
+                {
+                    result.Add(direct);
+                    continue;
+                }
+                Dictionary<string, object> conditional = AsDictionary(raw);
+                if (conditional == null || !ModernArgumentAllowedOnWindows(conditional) || !conditional.ContainsKey("value")) continue;
+                AddModernArgumentValue(conditional["value"], result);
+            }
+            return result;
+        }
+
+        private static string ReplaceLaunchVariables(string value, Dictionary<string, string> replacements)
+        {
+            string result = value ?? "";
+            foreach (KeyValuePair<string, string> pair in replacements) result = result.Replace(pair.Key, pair.Value ?? "");
+            return result;
+        }
+
+        private string BuildModernGameArguments(Dictionary<string, object> vanilla, string nickname)
+        {
+            List<string> tokens = ReadModernArguments(vanilla, "game");
+            if (tokens.Count == 0) throw new InvalidOperationException("Профиль 1.21.4 не содержит arguments.game.");
+
+            string assetIndex = "19";
+            object assetIndexObject;
+            if (vanilla.TryGetValue("assetIndex", out assetIndexObject))
+            {
+                Dictionary<string, object> asset = AsDictionary(assetIndexObject);
+                if (asset != null) assetIndex = ReadString(asset, "id", assetIndex);
+            }
+
+            string uuid = OfflineUuid(nickname);
+            Dictionary<string, string> replacements = new Dictionary<string, string>
+            {
+                { "$"+"{auth_player_name}", nickname },
+                { "$"+"{profile_name}", nickname },
+                { "$"+"{version_name}", "1.21.4" },
+                { "$"+"{game_directory}", velvetMinecraft1214GameDirectory },
+                { "$"+"{assets_root}", Path.Combine(velvetGameDirectory, "assets") },
+                { "$"+"{game_assets}", Path.Combine(velvetGameDirectory, "assets") },
+                { "$"+"{assets_index_name}", assetIndex },
+                { "$"+"{auth_uuid}", uuid },
+                { "$"+"{auth_access_token}", "0" },
+                { "$"+"{auth_session}", "0" },
+                { "$"+"{clientid}", "" },
+                { "$"+"{auth_xuid}", "" },
+                { "$"+"{user_type}", "legacy" },
+                { "$"+"{version_type}", "release" },
+                { "$"+"{user_properties}", "{}" }
+            };
+
+            for (int i = 0; i < tokens.Count; i++) tokens[i] = ReplaceLaunchVariables(tokens[i], replacements);
+            return string.Join(" ", tokens.Select(QuoteArgument));
+        }
+
+        private string BuildModernJvmArguments(Dictionary<string, object> vanilla, string nativesDir, string classPath)
+        {
+            List<string> tokens = ReadModernArguments(vanilla, "jvm");
+            string clientJar = Path.Combine(velvetGameDirectory, "versions", "1.21.4", "1.21.4.jar");
+            Dictionary<string, string> replacements = new Dictionary<string, string>
+            {
+                { "$"+"{natives_directory}", nativesDir },
+                { "$"+"{launcher_name}", "Velvet" },
+                { "$"+"{launcher_version}", "2.1" },
+                { "$"+"{classpath}", classPath },
+                { "$"+"{classpath_separator}", Path.PathSeparator.ToString() },
+                { "$"+"{library_directory}", Path.Combine(velvetGameDirectory, "libraries") },
+                { "$"+"{version_name}", "1.21.4" },
+                { "$"+"{primary_jar}", clientJar }
+            };
+
+            for (int i = 0; i < tokens.Count; i++) tokens[i] = ReplaceLaunchVariables(tokens[i], replacements);
+            bool hasClassPath = tokens.Any(x => string.Equals(x, "-cp", StringComparison.OrdinalIgnoreCase) || string.Equals(x, "-classpath", StringComparison.OrdinalIgnoreCase));
+            if (!hasClassPath)
+            {
+                tokens.Add("-cp");
+                tokens.Add(classPath);
+            }
+
+            string loggingArgument = GetModernLoggingArgument(vanilla);
+            if (!string.IsNullOrWhiteSpace(loggingArgument)) tokens.Add(loggingArgument);
+            tokens.Insert(0, "-Xmx2048M");
+            tokens.Insert(0, "-Xms512M");
+            return string.Join(" ", tokens.Select(QuoteArgument));
+        }
+
+        private string GetModernLoggingArgument(Dictionary<string, object> vanilla)
+        {
+            object loggingObject;
+            if (vanilla == null || !vanilla.TryGetValue("logging", out loggingObject)) return null;
+            Dictionary<string, object> logging = AsDictionary(loggingObject);
+            if (logging == null || !logging.ContainsKey("client")) return null;
+            Dictionary<string, object> client = AsDictionary(logging["client"]);
+            if (client == null || !client.ContainsKey("argument") || !client.ContainsKey("file")) return null;
+            Dictionary<string, object> file = AsDictionary(client["file"]);
+            if (file == null || !file.ContainsKey("id")) return null;
+            string id = Convert.ToString(file["id"], CultureInfo.InvariantCulture);
+            string path = Path.Combine(velvetGameDirectory, "assets", "log_configs", id);
+            if (!File.Exists(path)) return null;
+            return Convert.ToString(client["argument"], CultureInfo.InvariantCulture).Replace("$"+"{path}", path);
+        }
+
+        private string PrepareNatives1214(List<string> nativeJars)
+        {
+            string nativesDir = Path.Combine(velvetLauncherDirectory, "natives-1.21.4");
+            if (Directory.Exists(nativesDir))
+            {
+                try { Directory.Delete(nativesDir, true); } catch { }
+            }
+            Directory.CreateDirectory(nativesDir);
+            foreach (string jar in nativeJars)
+            {
+                using (FileStream stream = File.OpenRead(jar))
+                using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read))
+                {
+                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    {
+                        if (string.IsNullOrWhiteSpace(entry.Name)) continue;
+                        if (entry.FullName.StartsWith("META-INF/", StringComparison.OrdinalIgnoreCase)) continue;
+                        string destination = Path.Combine(nativesDir, Path.GetFileName(entry.Name));
+                        using (Stream source = entry.Open())
+                        using (FileStream target = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+                            source.CopyTo(target);
+                    }
+                }
+            }
+            return nativesDir;
+        }
+
+        private static int ParseJavaMajorVersion(string output)
+        {
+            if (string.IsNullOrWhiteSpace(output)) return 0;
+            int marker = output.IndexOf("version \"", StringComparison.OrdinalIgnoreCase);
+            if (marker < 0) return 0;
+            int start = marker + 9;
+            int end = output.IndexOf('\"', start);
+            if (end <= start) return 0;
+            string version = output.Substring(start, end - start);
+            string[] parts = version.Split('.');
+            int major;
+            if (parts.Length > 1 && parts[0] == "1")
+                return int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out major) ? major : 0;
+            return int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out major) ? major : 0;
+        }
+
+        private static int GetJavaMajorVersion(string javaPath)
+        {
+            try
+            {
+                string executable = javaPath;
+                if (string.Equals(Path.GetFileName(executable), "javaw.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    string consoleJava = Path.Combine(Path.GetDirectoryName(executable), "java.exe");
+                    if (File.Exists(consoleJava)) executable = consoleJava;
+                }
+                ProcessStartInfo info = new ProcessStartInfo
+                {
+                    FileName = executable,
+                    Arguments = "-version",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using (Process process = Process.Start(info))
+                {
+                    if (process == null) return 0;
+                    string output = process.StandardOutput.ReadToEnd() + Environment.NewLine + process.StandardError.ReadToEnd();
+                    if (!process.WaitForExit(5000))
+                    {
+                        try { process.Kill(); } catch { }
+                        return 0;
+                    }
+                    return ParseJavaMajorVersion(output);
+                }
+            }
+            catch { return 0; }
+        }
+
+        private string FindJava21Executable()
+        {
+            List<string> candidates = new List<string>();
+            Action<string> add = delegate(string path)
+            {
+                if (!string.IsNullOrWhiteSpace(path) && File.Exists(path) && !candidates.Any(x => string.Equals(x, path, StringComparison.OrdinalIgnoreCase)))
+                    candidates.Add(path);
+            };
+
+            string javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+            if (!string.IsNullOrWhiteSpace(javaHome))
+            {
+                add(Path.Combine(javaHome, "bin", "java.exe"));
+                add(Path.Combine(javaHome, "bin", "javaw.exe"));
+            }
+
+            string runtimeRoot = Path.Combine(minecraftDirectory, "runtime");
+            if (Directory.Exists(runtimeRoot))
+            {
+                try
+                {
+                    foreach (string java in Directory.GetFiles(runtimeRoot, "java.exe", SearchOption.AllDirectories)) add(java);
+                    foreach (string javaw in Directory.GetFiles(runtimeRoot, "javaw.exe", SearchOption.AllDirectories)) add(javaw);
+                }
+                catch { }
+            }
+
+            string[] roots = new string[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) };
+            foreach (string root in roots)
+            {
+                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
+                foreach (string vendor in new string[] { "Java", "Eclipse Adoptium", "Microsoft" })
+                {
+                    string vendorRoot = Path.Combine(root, vendor);
+                    if (!Directory.Exists(vendorRoot)) continue;
+                    try
+                    {
+                        foreach (string dir in Directory.GetDirectories(vendorRoot))
+                        {
+                            add(Path.Combine(dir, "bin", "java.exe"));
+                            add(Path.Combine(dir, "bin", "javaw.exe"));
+                            try
+                            {
+                                foreach (string sub in Directory.GetDirectories(dir))
+                                {
+                                    add(Path.Combine(sub, "bin", "java.exe"));
+                                    add(Path.Combine(sub, "bin", "javaw.exe"));
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            try
+            {
+                ProcessStartInfo whereInfo = new ProcessStartInfo { FileName = "where.exe", Arguments = "java.exe", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+                using (Process process = Process.Start(whereInfo))
+                {
+                    if (process != null)
+                    {
+                        string line;
+                        while ((line = process.StandardOutput.ReadLine()) != null) add(line.Trim());
+                        process.WaitForExit();
+                    }
+                }
+            }
+            catch { }
+
+            string compatible = null;
+            foreach (string candidate in candidates)
+            {
+                int major = GetJavaMajorVersion(candidate);
+                if (major == 21) return candidate;
+                if (major > 21 && compatible == null) compatible = candidate;
+            }
+            return compatible;
+        }
+
+        private async void LaunchVelvetMinecraft1214()
+        {
+            string nickname = launcherNicknameInput == null ? "Player" : launcherNicknameInput.Text.Trim();
+            if (!IsValidOfflineNickname(nickname))
+            {
+                launcherStatusText.Text = "Ник должен быть 3–16 символов: буквы, цифры и _";
+                ShowToast("Проверьте локальный ник");
+                return;
+            }
+
+            launcherStatusText.Text = "Проверяю локальную Minecraft 1.21.4…";
+            bool ready = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
+            if (!ready)
+            {
+                launcherAutoStartAfterPrepare = true;
+                launcherStatusText.Text = "Подготавливаю локальную Minecraft 1.21.4…";
+                PrepareMinecraft1214();
+                return;
+            }
+
+            launcherStatusText.Text = "Ищу Java 21…";
+            string java = await Task.Run(delegate { return FindJava21Executable(); });
+            if (string.IsNullOrWhiteSpace(java))
+            {
+                launcherStatusText.Text = "Java 21 не найдена. Minecraft 1.21.4 требует Java 21.";
+                ShowToast("Не найдена Java 21");
+                return;
+            }
+
+            try
+            {
+                EnsureVelvet1214GameFolders();
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                string vanillaJsonPath = Path.Combine(velvetGameDirectory, "versions", "1.21.4", "1.21.4.json");
+                Dictionary<string, object> vanilla = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(vanillaJsonPath));
+                if (vanilla == null) throw new InvalidOperationException("Не удалось прочитать профиль Minecraft 1.21.4.");
+
+                List<string> classPath = new List<string>();
+                List<string> nativeJars = new List<string>();
+                CollectLibraries(vanilla, classPath, nativeJars);
+                string clientJar = Path.Combine(velvetGameDirectory, "versions", "1.21.4", "1.21.4.jar");
+                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден локальный 1.21.4.jar.");
+                classPath.Add(clientJar);
+
+                string mainClass = ReadString(vanilla, "mainClass", null);
+                if (string.IsNullOrWhiteSpace(mainClass)) throw new InvalidOperationException("Не найден mainClass для Minecraft 1.21.4.");
+
+                launcherStatusText.Text = "Подготавливаю библиотеки запуска 1.21.4…";
+                string nativesDir = await Task.Run(delegate { return PrepareNatives1214(nativeJars); });
+                string classPathText = string.Join(Path.PathSeparator.ToString(), classPath);
+                string jvmArgs = BuildModernJvmArguments(vanilla, nativesDir, classPathText);
+                string gameArgs = BuildModernGameArguments(vanilla, nickname);
+
+                ProcessStartInfo info = new ProcessStartInfo
+                {
+                    FileName = java,
+                    Arguments = jvmArgs + " " + mainClass + " " + gameArgs,
+                    WorkingDirectory = velvetMinecraft1214GameDirectory,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                Process.Start(info);
+                launcherStatusText.Text = "Minecraft 1.21.4 Vanilla запущена напрямую · ник " + nickname;
+                ShowToast("Minecraft 1.21.4 запущена");
+                WriteLauncherLog("Minecraft 1.21.4 Vanilla запущена через Java 21: " + java);
+            }
+            catch (Exception ex)
+            {
+                WriteLauncherLog("Ошибка запуска Minecraft 1.21.4: " + ex);
+                launcherStatusText.Text = "Ошибка запуска 1.21.4: " + ShortLauncherError(ex.Message);
+                ShowToast("Не удалось запустить Minecraft 1.21.4");
+            }
         }
 
         private string FindLegacyFabric1122ProfileName()
@@ -1539,12 +2245,7 @@ namespace VelvetVault
         {
             if (launcherStatusText == null) return;
             launcherModsPathText.Text = velvetGameDirectory;
-            launcherLaunchButton.IsEnabled = true;
-            launcherDownloadButton.IsEnabled = true;
-            launcherDownloadButton.Content = "↓  Подготовить 1.12.2 + Fabric";
-            launcherProgressBar.Value = 0;
-            launcherProgressText.Text = "0%";
-            launcherStatusText.Text = "Страница готова. Проверки начнутся только после нажатия кнопки.";
+            RefreshLauncherVersionUi();
         }
 
         private static Dictionary<string, object> AsDictionary(object value)
