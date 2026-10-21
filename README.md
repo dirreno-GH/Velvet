@@ -36,7 +36,7 @@ Velvet можно полностью проверить и собрать сам
 - ₴ Финансы
 - ⇄ Конвертер файлов
 - 📄 Документы
-- ◇ Velvet launcher — Minecraft Java 1.12.2 Legacy Fabric и 1.21.4 Vanilla; использует уже имеющиеся локальные файлы Minecraft и не скачивает платный client JAR
+- ◇ Velvet launcher — Minecraft Java 1.8.9 Vanilla, 1.12.2 Legacy Fabric и 1.21.4 Vanilla; использует уже имеющиеся локальные файлы Minecraft и не скачивает платный client JAR
 - 🎨 Светлая, тёмная, серая и тёмно-зелёная темы
 - 🔒 Автоблокировка хранилища
 
