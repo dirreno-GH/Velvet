@@ -20,6 +20,7 @@ Velvet можно полностью проверить и собрать сам
 - [.github/workflows/build.yml](.github/workflows/build.yml) — открытый GitHub Actions workflow, который собирает EXE
 - [SHA256SUMS.txt](SHA256SUMS.txt) — SHA-256 текущей автоматической сборки
 - [BUILD_FROM_SOURCE.md](BUILD_FROM_SOURCE.md) — пошаговая самостоятельная сборка
+- [MICROSOFT_AUTH_SETUP.md](MICROSOFT_AUTH_SETUP.md) — официальный Microsoft/Xbox/Minecraft вход для лицензии
 
 Если вы не хотите запускать готовый неподписанный EXE, можно клонировать репозиторий, проверить исходники и собрать Velvet самостоятельно. Не требуется отключать Microsoft Defender или добавлять Velvet в исключения.
 
@@ -72,6 +73,14 @@ Get-FileHash .\VelvetVault-2.1.exe -Algorithm SHA256
 См. [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
 
 > Текущий EXE ещё не подписан SignPath. Репозиторий подготовлен для подачи заявки; доверенная подпись будет включена только после официального одобрения проекта.
+
+## Microsoft лицензия
+
+Velvet содержит официальный путь авторизации Microsoft для лицензированного Minecraft Java: Microsoft OAuth Device Code → Xbox Live → XSTS → Minecraft Services → проверка entitlement → Minecraft профиль.
+
+Для работы нужен собственный Microsoft Application (client) ID. Новому Client ID также может потребоваться Minecraft AppID approval/allowlist. Подробная инструкция: **[MICROSOFT_AUTH_SETUP.md](MICROSOFT_AUTH_SETUP.md)**.
+
+Velvet не просит и не хранит пароль Microsoft. Временные токены текущей реализации находятся только в памяти приложения.
 
 ## Системные требования
 
