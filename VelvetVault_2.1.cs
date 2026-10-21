@@ -782,8 +782,8 @@ namespace VelvetVault
 
               <Grid Margin='0,0,0,18'>
                 <Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='12'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
-                <Button x:Name='ChooseMinecraftSourceButton' Style='{StaticResource GhostButton}' Content='⌕  Выбрать установленную 1.12.2'/>
-                <Button x:Name='OpenModsFolderButton' Grid.Column='2' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet Minecraft'/>
+                <Button x:Name='ChooseMinecraftSourceButton' Visibility='Collapsed' Style='{StaticResource GhostButton}' Content='⌕  Импорт отключён'/>
+                <Button x:Name='OpenModsFolderButton' Grid.ColumnSpan='3' Style='{StaticResource GhostButton}' Content='▣  Открыть папку Velvet Minecraft'/>
               </Grid>
 
               <Grid Margin='0,0,0,8'>
@@ -796,7 +796,7 @@ namespace VelvetVault
               <Border Background='{DynamicResource SoftPanelBrush}' CornerRadius='14' Padding='14'>
                 <StackPanel>
                   <TextBlock x:Name='LauncherStatusText' Text='Нажмите «Скачать»' Foreground='{DynamicResource Ink}' FontSize='12' FontWeight='SemiBold'/>
-                  <TextBlock Text='Страница открывается без сканирования диска. Все проверки Minecraft и Java выполняются только после нажатия кнопок. Для 1.21.4 используются только уже установленные локальные файлы игры.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
+                  <TextBlock Text='Без лицензии Velvet скачивает официальные файлы Mojang и запускает только Demo Mode. С подтверждённой Microsoft-лицензией запускается полная игра. Импорт из других лаунчеров не нужен.' Foreground='{DynamicResource Muted}' FontSize='11' TextWrapping='Wrap' Margin='0,5,0,0'/>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -1523,20 +1523,17 @@ namespace VelvetVault
             launcherVersionText.Text = "Версия " + version;
             launcherLoaderText.Text = is189 || is1214 ? "Модлоадер: Vanilla" : "Модлоадер: Legacy Fabric";
             launcherVersionBadgeText.Text = is189 || is1214 ? "VANILLA" : "LEGACY FABRIC";
-            launcherDownloadButton.Content = is189
-                ? "↓  Импортировать 1.8.9"
-                : (is1214 ? "↓  Импортировать 1.21.4" : "↓  Подготовить 1.12.2 + Fabric");
-            chooseMinecraftSourceButton.Content = is189
-                ? "⌕  Выбрать установленную 1.8.9"
-                : (is1214 ? "⌕  Выбрать установленную 1.21.4" : "⌕  Выбрать установленную 1.12.2");
+            launcherDownloadButton.Content = "↓  Скачать " + version + (string.Equals(version, "1.12.2", StringComparison.OrdinalIgnoreCase) ? " + Fabric" : "");
+            chooseMinecraftSourceButton.Content = "⌕  Импорт отключён";
             launcherLaunchButton.IsEnabled = true;
             launcherDownloadButton.IsEnabled = true;
             launcherProgressBar.Value = 0;
             launcherProgressText.Text = "0%";
 
-            if (is189) launcherStatusText.Text = "Vanilla 1.8.9 выбрана. Проверки начнутся только после нажатия кнопки.";
-            else if (is1214) launcherStatusText.Text = "Vanilla 1.21.4 выбрана. Проверки начнутся только после нажатия кнопки.";
-            else launcherStatusText.Text = "Legacy Fabric 1.12.2 выбрана. Проверки начнутся только после нажатия кнопки.";
+            string accessMode = HasValidMicrosoftMinecraftSession() ? "полная версия по Microsoft-лицензии" : "Demo Mode без лицензии";
+            if (is189) launcherStatusText.Text = "Vanilla 1.8.9 выбрана · " + accessMode + ".";
+            else if (is1214) launcherStatusText.Text = "Vanilla 1.21.4 выбрана · " + accessMode + ".";
+            else launcherStatusText.Text = "Legacy Fabric 1.12.2 выбрана · " + accessMode + ".";
 
             UpdateMicrosoftAccountUi();
         }
@@ -1744,6 +1741,188 @@ namespace VelvetVault
             }
         }
 
+        private static bool IsOfficialMinecraftDownloadUrl(string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return false;
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
+            string host = uri.Host ?? "";
+            return host.EndsWith(".mojang.com", StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith(".minecraft.net", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<string> DownloadOfficialMinecraftText(string url)
+        {
+            if (!IsOfficialMinecraftDownloadUrl(url)) throw new InvalidOperationException("Заблокирован неофициальный URL Minecraft.");
+            using (WebClient client = new WebClient())
+            {
+                client.Encoding = Encoding.UTF8;
+                client.Headers[HttpRequestHeader.UserAgent] = "VelvetLauncher/2.1";
+                return await client.DownloadStringTaskAsync(new Uri(url));
+            }
+        }
+
+        private async Task DownloadOfficialMinecraftFile(string url, string destination)
+        {
+            if (!IsOfficialMinecraftDownloadUrl(url)) throw new InvalidOperationException("Заблокирован неофициальный URL Minecraft.");
+            if (File.Exists(destination)) return;
+
+            string directory = Path.GetDirectoryName(destination);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+            string temp = destination + ".download";
+
+            try
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+                using (WebClient client = new WebClient())
+                {
+                    client.Headers[HttpRequestHeader.UserAgent] = "VelvetLauncher/2.1";
+                    await client.DownloadFileTaskAsync(new Uri(url), temp);
+                }
+                if (File.Exists(destination)) File.Delete(destination);
+                File.Move(temp, destination);
+            }
+            finally
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+            }
+        }
+
+        private static Dictionary<string, object> GetDownloadInfo(Dictionary<string, object> container, string key)
+        {
+            if (container == null || !container.ContainsKey(key)) return null;
+            return AsDictionary(container[key]);
+        }
+
+        private async Task DownloadOfficialMinecraftVersion(string versionId, int startPercent, int endPercent)
+        {
+            EnsureVelvetGameFolders();
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+
+            SetLauncherProgress(startPercent, "Получаю официальный список версий Minecraft…");
+            string manifestJson = await DownloadOfficialMinecraftText("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json");
+            Dictionary<string, object> manifest = serializer.Deserialize<Dictionary<string, object>>(manifestJson);
+            if (manifest == null || !manifest.ContainsKey("versions")) throw new InvalidOperationException("Не удалось прочитать официальный manifest Minecraft.");
+
+            string versionUrl = null;
+            foreach (object raw in AsObjectArray(manifest["versions"]))
+            {
+                Dictionary<string, object> item = AsDictionary(raw);
+                if (item == null) continue;
+                if (!string.Equals(ReadString(item, "id", ""), versionId, StringComparison.OrdinalIgnoreCase)) continue;
+                versionUrl = ReadString(item, "url", null);
+                break;
+            }
+            if (string.IsNullOrWhiteSpace(versionUrl)) throw new InvalidOperationException("Версия " + versionId + " не найдена в официальном manifest Mojang.");
+
+            SetLauncherProgress(startPercent + 3, "Получаю профиль Minecraft " + versionId + "…");
+            string profileJson = await DownloadOfficialMinecraftText(versionUrl);
+            Dictionary<string, object> profile = serializer.Deserialize<Dictionary<string, object>>(profileJson);
+            if (profile == null) throw new InvalidOperationException("Не удалось прочитать профиль Minecraft " + versionId + ".");
+
+            string versionDir = Path.Combine(velvetGameDirectory, "versions", versionId);
+            Directory.CreateDirectory(versionDir);
+            File.WriteAllText(Path.Combine(versionDir, versionId + ".json"), profileJson, new UTF8Encoding(false));
+
+            Dictionary<string, object> downloads = profile.ContainsKey("downloads") ? AsDictionary(profile["downloads"]) : null;
+            Dictionary<string, object> clientInfo = GetDownloadInfo(downloads, "client");
+            string clientUrl = ReadString(clientInfo, "url", null);
+            if (string.IsNullOrWhiteSpace(clientUrl)) throw new InvalidOperationException("В профиле " + versionId + " нет официального client URL.");
+
+            SetLauncherProgress(startPercent + 8, "Скачиваю Minecraft " + versionId + "…");
+            await DownloadOfficialMinecraftFile(clientUrl, Path.Combine(versionDir, versionId + ".jar"));
+
+            if (profile.ContainsKey("libraries"))
+            {
+                object[] libraries = AsObjectArray(profile["libraries"]);
+                int totalLibraries = Math.Max(1, libraries.Length);
+                for (int i = 0; i < libraries.Length; i++)
+                {
+                    Dictionary<string, object> library = AsDictionary(libraries[i]);
+                    if (library == null || !LibraryAllowedOnWindows(library)) continue;
+                    Dictionary<string, object> libraryDownloads = library.ContainsKey("downloads") ? AsDictionary(library["downloads"]) : null;
+                    if (libraryDownloads == null) continue;
+
+                    Dictionary<string, object> artifact = GetDownloadInfo(libraryDownloads, "artifact");
+                    string artifactPath = ReadString(artifact, "path", null);
+                    string artifactUrl = ReadString(artifact, "url", null);
+                    if (!string.IsNullOrWhiteSpace(artifactPath) && !string.IsNullOrWhiteSpace(artifactUrl))
+                        await DownloadOfficialMinecraftFile(artifactUrl, Path.Combine(velvetGameDirectory, "libraries", artifactPath.Replace('/', Path.DirectorySeparatorChar)));
+
+                    if (library.ContainsKey("natives") && libraryDownloads.ContainsKey("classifiers"))
+                    {
+                        Dictionary<string, object> natives = AsDictionary(library["natives"]);
+                        Dictionary<string, object> classifiers = AsDictionary(libraryDownloads["classifiers"]);
+                        if (natives != null && classifiers != null && natives.ContainsKey("windows"))
+                        {
+                            string classifier = Convert.ToString(natives["windows"], CultureInfo.InvariantCulture)
+                                .Replace("$"+"{arch}", Environment.Is64BitOperatingSystem ? "64" : "32");
+                            if (classifiers.ContainsKey(classifier))
+                            {
+                                Dictionary<string, object> nativeInfo = AsDictionary(classifiers[classifier]);
+                                string nativePath = ReadString(nativeInfo, "path", null);
+                                string nativeUrl = ReadString(nativeInfo, "url", null);
+                                if (!string.IsNullOrWhiteSpace(nativePath) && !string.IsNullOrWhiteSpace(nativeUrl))
+                                    await DownloadOfficialMinecraftFile(nativeUrl, Path.Combine(velvetGameDirectory, "libraries", nativePath.Replace('/', Path.DirectorySeparatorChar)));
+                            }
+                        }
+                    }
+
+                    if (i % 10 == 0)
+                    {
+                        int p = startPercent + 12 + (int)Math.Round(18.0 * i / totalLibraries);
+                        SetLauncherProgress(Math.Min(endPercent - 25, p), "Скачиваю библиотеки " + versionId + "…");
+                    }
+                }
+            }
+
+            Dictionary<string, object> assetIndex = profile.ContainsKey("assetIndex") ? AsDictionary(profile["assetIndex"]) : null;
+            string assetId = ReadString(assetIndex, "id", null);
+            string assetUrl = ReadString(assetIndex, "url", null);
+            if (string.IsNullOrWhiteSpace(assetId) || string.IsNullOrWhiteSpace(assetUrl)) throw new InvalidOperationException("Некорректный assetIndex " + versionId + ".");
+
+            string assetIndexPath = Path.Combine(velvetGameDirectory, "assets", "indexes", assetId + ".json");
+            SetLauncherProgress(Math.Max(startPercent + 32, endPercent - 24), "Скачиваю индекс ресурсов " + versionId + "…");
+            await DownloadOfficialMinecraftFile(assetUrl, assetIndexPath);
+
+            Dictionary<string, object> index = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(assetIndexPath));
+            Dictionary<string, object> objects = index != null && index.ContainsKey("objects") ? AsDictionary(index["objects"]) : null;
+            if (objects != null)
+            {
+                int total = Math.Max(1, objects.Count);
+                int done = 0;
+                foreach (object raw in objects.Values)
+                {
+                    Dictionary<string, object> entry = AsDictionary(raw);
+                    string hash = ReadString(entry, "hash", null);
+                    if (!string.IsNullOrWhiteSpace(hash) && hash.Length >= 2)
+                    {
+                        string relative = Path.Combine(hash.Substring(0, 2), hash);
+                        string target = Path.Combine(velvetGameDirectory, "assets", "objects", relative);
+                        string url = "https://resources.download.minecraft.net/" + hash.Substring(0, 2) + "/" + hash;
+                        await DownloadOfficialMinecraftFile(url, target);
+                    }
+                    done++;
+                    if (done % 50 == 0)
+                    {
+                        int p = endPercent - 20 + (int)Math.Round(18.0 * done / total);
+                        SetLauncherProgress(Math.Min(endPercent - 2, p), "Скачиваю ресурсы " + versionId + " · " + done + "/" + total);
+                    }
+                }
+            }
+
+            Dictionary<string, object> logging = profile.ContainsKey("logging") ? AsDictionary(profile["logging"]) : null;
+            Dictionary<string, object> loggingClient = logging != null && logging.ContainsKey("client") ? AsDictionary(logging["client"]) : null;
+            Dictionary<string, object> loggingFile = loggingClient != null && loggingClient.ContainsKey("file") ? AsDictionary(loggingClient["file"]) : null;
+            string loggingId = ReadString(loggingFile, "id", null);
+            string loggingUrl = ReadString(loggingFile, "url", null);
+            if (!string.IsNullOrWhiteSpace(loggingId) && !string.IsNullOrWhiteSpace(loggingUrl))
+                await DownloadOfficialMinecraftFile(loggingUrl, Path.Combine(velvetGameDirectory, "assets", "log_configs", loggingId));
+
+            SetLauncherProgress(endPercent, "Minecraft " + versionId + " скачана из официальных источников Mojang.");
+            WriteLauncherLog("Minecraft " + versionId + " скачана из Mojang/Minecraft CDN. Без лицензии запуск только Demo Mode.");
+        }
+
         private async void PrepareMinecraft189()
         {
             if (launcherDownloadBusy)
@@ -1758,35 +1937,20 @@ namespace VelvetVault
             bool canAutoLaunch = false;
             try
             {
-                SetLauncherProgress(5, "Проверяю локальную Minecraft 1.8.9…");
-                bool imported = await Task.Run(delegate { return HasVelvetMinecraft189Files(); });
-                if (!imported)
+                SetLauncherProgress(5, "Проверяю Minecraft 1.8.9 в Velvet…");
+                bool ready = await Task.Run(delegate { return HasVelvetMinecraft189Files(); });
+                if (!ready)
                 {
-                    SetLauncherProgress(20, "Ищу уже установленную Minecraft 1.8.9…");
-                    string sourceVersionDir = await Task.Run(delegate { return FindVersion189Directory(); });
-                    if (sourceVersionDir != null)
-                    {
-                        WriteLauncherLog("Найдена локальная Minecraft 1.8.9: " + sourceVersionDir);
-                        SetLauncherProgress(35, "Импортирую Minecraft 1.8.9 без скачивания client.jar…");
-                        await Task.Run(delegate { ImportMinecraft189IntoVelvet(sourceVersionDir); });
-                        imported = await Task.Run(delegate { return HasVelvetMinecraft189Files(); });
-                    }
+                    await DownloadOfficialMinecraftVersion("1.8.9", 8, 96);
+                    ready = await Task.Run(delegate { return HasVelvetMinecraft189Files(); });
                 }
 
-                if (imported)
-                {
-                    SetLauncherProgress(100, "Готово · Minecraft 1.8.9 Vanilla подготовлена");
-                    ShowToast("Minecraft 1.8.9 Vanilla готова");
-                    WriteLauncherLog("Подготовка Minecraft 1.8.9 завершена успешно.");
-                    canAutoLaunch = launcherAutoStartAfterPrepare && IsLauncher189Selected();
-                }
-                else
-                {
-                    launcherAutoStartAfterPrepare = false;
-                    SetLauncherProgress(100, "Minecraft 1.8.9 на ПК не найдена · выберите установленную 1.8.9.jar");
-                    ShowToast("Нужна уже установленная Minecraft 1.8.9");
-                    WriteLauncherLog("Minecraft 1.8.9 не найдена. Загрузка client.jar не выполнялась.");
-                }
+                if (!ready) throw new InvalidOperationException("Minecraft 1.8.9 не удалось подготовить.");
+
+                SetLauncherProgress(100, "Готово · Minecraft 1.8.9 Vanilla скачана");
+                ShowToast(HasValidMicrosoftMinecraftSession() ? "Minecraft 1.8.9 готова" : "Minecraft 1.8.9 Demo готова");
+                WriteLauncherLog("Подготовка Minecraft 1.8.9 завершена успешно.");
+                canAutoLaunch = launcherAutoStartAfterPrepare && IsLauncher189Selected();
             }
             catch (Exception ex)
             {
@@ -1822,8 +1986,8 @@ namespace VelvetVault
             }
 
             bool licensed = HasValidMicrosoftMinecraftSession();
-            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : nickname;
-            string effectiveUuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid(nickname);
+            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : "Player";
+            string effectiveUuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid("Player");
             string effectiveToken = licensed ? microsoftMinecraftSession.MinecraftAccessToken : "0";
 
             Dictionary<string, string> replacements = new Dictionary<string, string>
@@ -1841,6 +2005,7 @@ namespace VelvetVault
             };
 
             foreach (KeyValuePair<string, string> item in replacements) arguments = arguments.Replace(item.Key, item.Value);
+            if (!licensed) arguments += " --demo";
             return arguments;
         }
 
@@ -1908,20 +2073,14 @@ namespace VelvetVault
 
         private async void LaunchVelvetMinecraft189()
         {
-            string nickname = launcherNicknameInput == null ? "Player" : launcherNicknameInput.Text.Trim();
-            if (!HasValidMicrosoftMinecraftSession() && !IsValidOfflineNickname(nickname))
-            {
-                launcherStatusText.Text = "Ник должен быть 3–16 символов: буквы, цифры и _";
-                ShowToast("Проверьте локальный ник");
-                return;
-            }
+            string nickname = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : "Player";
 
-            launcherStatusText.Text = "Проверяю локальную Minecraft 1.8.9…";
+            launcherStatusText.Text = "Проверяю Minecraft 1.8.9…";
             bool ready = await Task.Run(delegate { return HasVelvetMinecraft189Files(); });
             if (!ready)
             {
                 launcherAutoStartAfterPrepare = true;
-                launcherStatusText.Text = "Подготавливаю локальную Minecraft 1.8.9…";
+                launcherStatusText.Text = "Скачиваю Minecraft 1.8.9…";
                 PrepareMinecraft189();
                 return;
             }
@@ -1948,7 +2107,7 @@ namespace VelvetVault
                 CollectLibraries(vanilla, classPath, nativeJars);
 
                 string clientJar = Path.Combine(velvetGameDirectory, "versions", "1.8.9", "1.8.9.jar");
-                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден локальный 1.8.9.jar.");
+                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден 1.8.9.jar.");
                 classPath.Add(clientJar);
 
                 string mainClass = ReadString(vanilla, "mainClass", null);
@@ -1973,10 +2132,9 @@ namespace VelvetVault
                     CreateNoWindow = true
                 };
                 Process.Start(info);
-                string launchedName = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : nickname;
-                launcherStatusText.Text = "Minecraft 1.8.9 Vanilla запущена · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "offline · ") + launchedName;
+                launcherStatusText.Text = "Minecraft 1.8.9 Vanilla запущена · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "Demo Mode · ") + nickname;
                 ShowToast("Minecraft 1.8.9 запущена");
-                WriteLauncherLog("Minecraft 1.8.9 Vanilla запущена через Java 8: " + java);
+                WriteLauncherLog("Minecraft 1.8.9 Vanilla запущена через Java 8.");
             }
             catch (Exception ex)
             {
@@ -2191,35 +2349,20 @@ namespace VelvetVault
             bool canAutoLaunch = false;
             try
             {
-                SetLauncherProgress(5, "Проверяю локальную Minecraft 1.21.4…");
-                bool imported = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
-                if (!imported)
+                SetLauncherProgress(5, "Проверяю Minecraft 1.21.4 в Velvet…");
+                bool ready = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
+                if (!ready)
                 {
-                    SetLauncherProgress(20, "Ищу уже установленную Minecraft 1.21.4…");
-                    string sourceVersionDir = await Task.Run(delegate { return FindVersion1214Directory(); });
-                    if (sourceVersionDir != null)
-                    {
-                        WriteLauncherLog("Найдена локальная Minecraft 1.21.4: " + sourceVersionDir);
-                        SetLauncherProgress(35, "Импортирую Minecraft 1.21.4 без скачивания client.jar…");
-                        await Task.Run(delegate { ImportMinecraft1214IntoVelvet(sourceVersionDir); });
-                        imported = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
-                    }
+                    await DownloadOfficialMinecraftVersion("1.21.4", 8, 96);
+                    ready = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
                 }
 
-                if (imported)
-                {
-                    SetLauncherProgress(100, "Готово · Minecraft 1.21.4 Vanilla подготовлена");
-                    ShowToast("Minecraft 1.21.4 Vanilla готова");
-                    WriteLauncherLog("Подготовка Minecraft 1.21.4 завершена успешно.");
-                    canAutoLaunch = launcherAutoStartAfterPrepare && IsLauncher1214Selected();
-                }
-                else
-                {
-                    launcherAutoStartAfterPrepare = false;
-                    SetLauncherProgress(100, "Minecraft 1.21.4 на ПК не найдена · выберите установленную 1.21.4.jar");
-                    ShowToast("Нужна уже установленная Minecraft 1.21.4");
-                    WriteLauncherLog("Minecraft 1.21.4 не найдена. Загрузка client.jar не выполнялась.");
-                }
+                if (!ready) throw new InvalidOperationException("Minecraft 1.21.4 не удалось подготовить.");
+
+                SetLauncherProgress(100, "Готово · Minecraft 1.21.4 Vanilla скачана");
+                ShowToast(HasValidMicrosoftMinecraftSession() ? "Minecraft 1.21.4 готова" : "Minecraft 1.21.4 Demo готова");
+                WriteLauncherLog("Подготовка Minecraft 1.21.4 завершена успешно.");
+                canAutoLaunch = launcherAutoStartAfterPrepare && IsLauncher1214Selected();
             }
             catch (Exception ex)
             {
@@ -2332,8 +2475,8 @@ namespace VelvetVault
             }
 
             bool licensed = HasValidMicrosoftMinecraftSession();
-            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : nickname;
-            string uuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid(nickname);
+            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : "Player";
+            string uuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid("Player");
             string accessToken = licensed ? microsoftMinecraftSession.MinecraftAccessToken : "0";
             string clientId = licensed ? microsoftMinecraftSession.ClientId : "";
             Dictionary<string, string> replacements = new Dictionary<string, string>
@@ -2356,6 +2499,7 @@ namespace VelvetVault
             };
 
             for (int i = 0; i < tokens.Count; i++) tokens[i] = ReplaceLaunchVariables(tokens[i], replacements);
+            if (!licensed) tokens.Add("--demo");
             return string.Join(" ", tokens.Select(QuoteArgument));
         }
 
@@ -2566,20 +2710,14 @@ namespace VelvetVault
 
         private async void LaunchVelvetMinecraft1214()
         {
-            string nickname = launcherNicknameInput == null ? "Player" : launcherNicknameInput.Text.Trim();
-            if (!IsValidOfflineNickname(nickname))
-            {
-                launcherStatusText.Text = "Ник должен быть 3–16 символов: буквы, цифры и _";
-                ShowToast("Проверьте локальный ник");
-                return;
-            }
+            string nickname = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : "Player";
 
-            launcherStatusText.Text = "Проверяю локальную Minecraft 1.21.4…";
+            launcherStatusText.Text = "Проверяю Minecraft 1.21.4…";
             bool ready = await Task.Run(delegate { return HasVelvetMinecraft1214Files(); });
             if (!ready)
             {
                 launcherAutoStartAfterPrepare = true;
-                launcherStatusText.Text = "Подготавливаю локальную Minecraft 1.21.4…";
+                launcherStatusText.Text = "Скачиваю Minecraft 1.21.4…";
                 PrepareMinecraft1214();
                 return;
             }
@@ -2605,7 +2743,7 @@ namespace VelvetVault
                 List<string> nativeJars = new List<string>();
                 CollectLibraries(vanilla, classPath, nativeJars);
                 string clientJar = Path.Combine(velvetGameDirectory, "versions", "1.21.4", "1.21.4.jar");
-                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден локальный 1.21.4.jar.");
+                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден 1.21.4.jar.");
                 classPath.Add(clientJar);
 
                 string mainClass = ReadString(vanilla, "mainClass", null);
@@ -2626,10 +2764,9 @@ namespace VelvetVault
                     CreateNoWindow = true
                 };
                 Process.Start(info);
-                string launchedName = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : nickname;
-                launcherStatusText.Text = "Minecraft 1.21.4 Vanilla запущена напрямую · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "offline · ") + launchedName;
+                launcherStatusText.Text = "Minecraft 1.21.4 Vanilla запущена · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "Demo Mode · ") + nickname;
                 ShowToast("Minecraft 1.21.4 запущена");
-                WriteLauncherLog("Minecraft 1.21.4 Vanilla запущена через Java 21: " + java);
+                WriteLauncherLog("Minecraft 1.21.4 Vanilla запущена через Java 21.");
             }
             catch (Exception ex)
             {
@@ -3333,51 +3470,33 @@ namespace VelvetVault
                 Directory.CreateDirectory(velvetLauncherDirectory);
                 EnsureVelvetGameFolders();
                 launcherModsPathText.Text = velvetGameDirectory;
-                WriteLauncherLog("Начало подготовки Velvet Minecraft 1.12.2.");
+                WriteLauncherLog("Начало загрузки Velvet Minecraft 1.12.2.");
 
-                SetLauncherProgress(5, "Устанавливаю Legacy Fabric 1.12.2 в папку Velvet…");
+                bool ready = HasVelvetMinecraft1122Files();
+                if (!ready)
+                {
+                    await DownloadOfficialMinecraftVersion("1.12.2", 5, 62);
+                    ready = HasVelvetMinecraft1122Files();
+                }
+                if (!ready) throw new InvalidOperationException("Minecraft 1.12.2 не удалось скачать.");
+
+                SetLauncherProgress(64, "Устанавливаю Legacy Fabric 1.12.2…");
                 string fabricVersion = await InstallLegacyFabricDirectly();
                 WriteLauncherLog("Legacy Fabric установлен: " + fabricVersion);
 
-                bool imported = HasVelvetMinecraft1122Files();
-                if (!imported)
-                {
-                    SetLauncherProgress(70, "Fabric установлен · ищу локальную Minecraft 1.12.2 для импорта…");
-                    string sourceVersionDir = await Task.Run(delegate { return FindVersion1122Directory(); });
-                    if (sourceVersionDir != null)
-                    {
-                        WriteLauncherLog("Найдена локальная Minecraft 1.12.2: " + sourceVersionDir);
-                        await Task.Run(delegate { ImportMinecraft1122IntoVelvet(sourceVersionDir); });
-                        imported = HasVelvetMinecraft1122Files();
-                    }
-                }
-
-                EnsureVelvetGameFolders();
-
-                if (imported)
-                {
-                    SetLauncherProgress(100, "Готово · Minecraft 1.12.2 + Legacy Fabric подготовлены");
-                    launcherDownloadButton.Content = "↻  Переустановить Fabric";
-                    ShowToast("Minecraft 1.12.2 + Legacy Fabric готовы");
-                    WriteLauncherLog("Подготовка завершена успешно.");
-                    canAutoLaunch = launcherAutoStartAfterPrepare;
-                }
-                else
-                {
-                    launcherAutoStartAfterPrepare = false;
-                    SetLauncherProgress(100, "Legacy Fabric установлен · базовая Minecraft 1.12.2 на ПК не найдена");
-                    launcherDownloadButton.Content = "↻  Переустановить Fabric";
-                    ShowToast("Fabric установлен. Для запуска нужна локальная Minecraft 1.12.2");
-                    WriteLauncherLog("Fabric установлен, но базовая Minecraft 1.12.2 для импорта не найдена.");
-                }
+                SetLauncherProgress(100, "Готово · Minecraft 1.12.2 + Legacy Fabric скачаны");
+                launcherDownloadButton.Content = "↓  Скачать 1.12.2 + Fabric";
+                ShowToast(HasValidMicrosoftMinecraftSession() ? "Minecraft 1.12.2 + Fabric готовы" : "Minecraft 1.12.2 Demo + Fabric готовы");
+                WriteLauncherLog("Подготовка завершена успешно.");
+                canAutoLaunch = launcherAutoStartAfterPrepare;
             }
             catch (Exception ex)
             {
                 launcherAutoStartAfterPrepare = false;
                 string details = ex.GetType().Name + ": " + ex.Message;
                 WriteLauncherLog("ОШИБКА: " + details + Environment.NewLine + ex.StackTrace);
-                SetLauncherProgress((int)(launcherProgressBar == null ? 0 : launcherProgressBar.Value), "Ошибка Fabric: " + ShortLauncherError(ex.Message));
-                ShowToast("Ошибка Fabric: " + ShortLauncherError(ex.Message));
+                SetLauncherProgress((int)(launcherProgressBar == null ? 0 : launcherProgressBar.Value), "Ошибка загрузки: " + ShortLauncherError(ex.Message));
+                ShowToast("Ошибка загрузки: " + ShortLauncherError(ex.Message));
             }
             finally
             {
@@ -3642,8 +3761,8 @@ namespace VelvetVault
             }
 
             bool licensed = HasValidMicrosoftMinecraftSession();
-            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : nickname;
-            string effectiveUuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid(nickname);
+            string effectiveName = licensed ? microsoftMinecraftSession.ProfileName : "Player";
+            string effectiveUuid = licensed ? microsoftMinecraftSession.ProfileId : OfflineUuid("Player");
             string effectiveToken = licensed ? microsoftMinecraftSession.MinecraftAccessToken : "0";
             Dictionary<string, string> replacements = new Dictionary<string, string>
             {
@@ -3659,18 +3778,13 @@ namespace VelvetVault
                 { "$"+"{user_properties}", QuoteArgument("{}") }
             };
             foreach (KeyValuePair<string, string> item in replacements) arguments = arguments.Replace(item.Key, item.Value);
+            if (!licensed) arguments += " --demo";
             return arguments;
         }
 
         private async void LaunchVelvetMinecraft()
         {
-            string nickname = launcherNicknameInput == null ? "Player" : launcherNicknameInput.Text.Trim();
-            if (!IsValidOfflineNickname(nickname))
-            {
-                launcherStatusText.Text = "Ник должен быть 3–16 символов: буквы, цифры и _";
-                ShowToast("Проверьте локальный ник");
-                return;
-            }
+            string nickname = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : "Player";
 
             bool fabricReady = IsLegacyFabric1122Installed();
             bool baseReady = HasVelvetMinecraft1122Files();
@@ -3678,8 +3792,8 @@ namespace VelvetVault
             if (!fabricReady || !baseReady)
             {
                 launcherAutoStartAfterPrepare = true;
-                launcherStatusText.Text = "Подготавливаю Velvet Minecraft 1.12.2 + Legacy Fabric…";
-                ShowToast("Velvet сам подготовит игру и затем запустит её");
+                launcherStatusText.Text = "Скачиваю Velvet Minecraft 1.12.2 + Legacy Fabric…";
+                ShowToast("Velvet сам скачает игру и затем запустит её");
                 DownloadVelvetMinecraft();
                 return;
             }
@@ -3709,7 +3823,7 @@ namespace VelvetVault
                 CollectLibraries(fabric, classPath, nativeJars);
 
                 string clientJar = Path.Combine(velvetGameDirectory, "versions", "1.12.2", "1.12.2.jar");
-                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден локальный 1.12.2.jar.");
+                if (!File.Exists(clientJar)) throw new FileNotFoundException("Не найден 1.12.2.jar.");
                 classPath.Add(clientJar);
 
                 string mainClass = ReadString(fabric, "mainClass", ReadString(vanilla, "mainClass", null));
@@ -3737,8 +3851,7 @@ namespace VelvetVault
                     CreateNoWindow = true
                 };
                 Process.Start(info);
-                string launchedName = HasValidMicrosoftMinecraftSession() ? microsoftMinecraftSession.ProfileName : nickname;
-                launcherStatusText.Text = "Minecraft 1.12.2 Legacy Fabric запущен напрямую · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "offline · ") + launchedName;
+                launcherStatusText.Text = "Minecraft 1.12.2 Legacy Fabric запущен · " + (HasValidMicrosoftMinecraftSession() ? "Microsoft лицензия · " : "Demo Mode · ") + nickname;
                 ShowToast("Minecraft запущен");
             }
             catch (Exception ex)
