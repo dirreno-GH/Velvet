@@ -10,6 +10,8 @@ Velvet можно полностью проверить и собрать сам
 
 **Основной исходный код:** [VelvetVault_2.1.cs](VelvetVault_2.1.cs)
 
+**[Скачать весь исходный код ZIP](https://github.com/dirreno-GH/Velvet/archive/refs/heads/main.zip)**
+
 Файлы, необходимые для проверки и сборки:
 
 - [VelvetVault_2.1.cs](VelvetVault_2.1.cs) — полный C# / WPF код приложения
